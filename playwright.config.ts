@@ -20,8 +20,6 @@ const baseURL = config.baseUrl;
 export default defineConfig({
   testDir: './tests',
   testMatch: /.*\.test\.ts/,
-  // Exclude example files - they are reference templates, not functional tests
-  testIgnore: ['**/module-example/**'],
 
   fullyParallel: false,
   forbidOnly: !!process.env.CI,

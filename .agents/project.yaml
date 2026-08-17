@@ -105,21 +105,16 @@ git_strategy:
 environments:
   local:
     web_url: 'http://localhost:3000' # Frontend URL for local env (e.g. http://localhost:3000)
-    api_url: 'http://localhost:3000/api' # API base URL for local env (e.g. http://localhost:3000/api)
-    db_mcp: local-dbhub # MCP server name for local DB (e.g. myproject-local-db)
-    api_mcp: local-openapi # MCP server name for local API (e.g. myproject-local-api)
-  qa:
-    web_url: 'https://staging-upexbunkai.vercel.app' # Frontend URL for qa env (e.g. https://qa.myproject.com)
-    api_url: 'https://staging-upexbunkai.vercel.app/api' # API base URL for qa env (e.g. https://api-qa.myproject.com)
-    db_mcp: staging-dbhub # MCP server name for qa DB (e.g. myproject-qa-db)
-    api_mcp: staging-openapi # MCP server name for qa API (e.g. myproject-qa-api)
+    api_url: 'http://localhost:3000/api/v1' # API base URL for local env (matches config/variables.ts + BK-29)
+    db_mcp: dbhub # MCP server name for local DB — single physical Supabase pooler per BK-29, no local-dbhub server exists in .mcp.json
+    api_mcp: openapi # MCP server name for local API — single runtime OpenAPI route, no local-openapi server exists in .mcp.json
   staging:
     web_url: 'https://staging-upexbunkai.vercel.app' # Frontend URL for staging env (e.g. https://staging.myproject.com)
-    api_url: 'https://staging-upexbunkai.vercel.app/api' # API base URL for staging env (e.g. https://api-staging.myproject.com)
-    db_mcp: staging-dbhub # MCP server name for staging DB (e.g. myproject-staging-db)
-    api_mcp: staging-openapi # MCP server name for staging API (e.g. myproject-staging-api)
+    api_url: 'https://staging-upexbunkai.vercel.app/api/v1' # API base URL for staging env (matches config/variables.ts + BK-29)
+    db_mcp: dbhub # MCP server name for staging DB — single physical Supabase pooler per BK-29, no staging-dbhub server exists in .mcp.json
+    api_mcp: openapi # MCP server name for staging API — single runtime OpenAPI route, no staging-openapi server exists in .mcp.json
   production:
     web_url: 'https://upexbunkai.vercel.app' # Frontend URL for production env (e.g. https://myproject.com)
-    api_url: 'https://upexbunkai.vercel.app/api' # API base URL for production env (e.g. https://api.myproject.com)
+    api_url: 'https://upexbunkai.vercel.app/api/v1' # API base URL for production env (matches BK-29)
     db_mcp: dbhub # MCP server name for production DB (e.g. myproject-production-db)
-    api_mcp: openapi # MCP server name for production API (e.g. myproject-production-api)
+    api_mcp: openapi # MCP server name for production API — single runtime OpenAPI route shared across all envs

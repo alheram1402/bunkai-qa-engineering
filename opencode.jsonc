@@ -57,7 +57,15 @@
     "dbhub": {
       "type": "local",
       "command": ["bunx", "-y", "@bytebase/dbhub@latest", "--config", "dbhub.toml"],
-      "enabled": true
+      "enabled": true,
+      "environment": {
+        "DBHUB_TYPE": "{env:DBHUB_TYPE}",
+        "DBHUB_HOST": "{env:DBHUB_HOST}",
+        "DBHUB_PORT": "{env:DBHUB_PORT}",
+        "DBHUB_DATABASE": "{env:DBHUB_DATABASE}",
+        "DBHUB_USER": "{env:DBHUB_USER}",
+        "DBHUB_PASSWORD": "{env:DBHUB_PASSWORD}"
+      }
     },
     // SCHEMA-READ-ONLY: no API_TOKEN / Authorization header is injected here.
     // The OpenAPI MCP is used ONLY to discover endpoints + read schemas
@@ -65,6 +73,9 @@
     // executed with curl (token from `bun run api:login` → .auth/tokens.env).
     // Keeping credentials out of the MCP also removes the spawn-time restart
     // requirement for API auth. OPENAPI_SPEC_PATH may be a local file OR a URL.
+    // Single server for local + staging + production — Bunkai has one runtime
+    // OpenAPI route (no local dev server assumed running), so a per-env split
+    // would just be identical duplicates. Mirrors the "dbhub" unification (BK-29).
     "openapi": {
       "type": "local",
       "command": ["bunx", "-y", "@ivotoby/openapi-mcp-server", "--tools", "dynamic"],

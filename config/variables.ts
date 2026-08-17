@@ -112,12 +112,12 @@ const envDataMap: Record<
 > = {
   local: {
     base: 'http://localhost:3000',
-    api: 'http://localhost:3000/api',
+    api: 'http://localhost:3000/api/v1',
     user: userCredentialsMap.local,
   },
   staging: {
-    base: 'https://dojo.upexgalaxy.com',
-    api: 'https://dojo.upexgalaxy.com/api',
+    base: 'https://staging-upexbunkai.vercel.app',
+    api: 'https://staging-upexbunkai.vercel.app/api/v1',
     user: userCredentialsMap.staging,
   },
 };
@@ -132,12 +132,19 @@ export const config = {
   baseUrl: envData.base,
   apiUrl: envData.api,
 
-  // Authentication config (UPEX Dojo endpoints - relative to apiUrl)
+  // Authentication config (Bunkai TMS endpoints - relative to apiUrl)
   auth: {
-    loginEndpoint: '/auth/login',
-    tokenEndpoint: '/auth/login', // Endpoint to intercept for token (used by page.waitForResponse)
-    meEndpoint: '/auth/me',
-    tokenLifetimeSeconds: 86400, // 24 hours (1 day)
+    loginEndpoint: '/auth/signin',
+    tokenEndpoint: '/auth/signin', // Endpoint to intercept for token (used by page.waitForResponse)
+    meEndpoint: '/me',
+    // Conservative default, NOT a confirmed contract: the response's `pat.token`
+    // does not expire by default (headless signin never passes
+    // `pat_expires_in_days`, so `pat.expires_at` is null) — the PAT is
+    // effectively long-lived. The Supabase SSR `session.access_token`'s real
+    // TTL was not read from live project config (Discovery Gap, plan §11).
+    // This value is a cookie-session-only estimate; the suite re-mints the
+    // session every run regardless, so it never actually depends on this TTL.
+    tokenLifetimeSeconds: 3600, // 1 hour (conservative estimate, cookie session only)
     // Storage paths for authenticated sessions
     storageStatePath: '.auth/user.json',
     apiStatePath: '.auth/api-state.json',
