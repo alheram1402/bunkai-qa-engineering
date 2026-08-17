@@ -304,6 +304,29 @@ const FOLDER_PREFIX: Record<string, string> = {
   precondition: 'PRECONDITION',
 };
 
+/**
+ * Jira's REST API returns `issuetype.name` localized to the requesting account's
+ * profile language for the handful of *default* system issue types (Story, Epic,
+ * Bug, Task, Subtask) — custom types are unaffected. `.agents/jira-required.yaml`
+ * and every JQL literal in this file are authored in English, so a non-English
+ * Atlassian profile silently breaks every `.fields.issuetype?.name` comparison.
+ * Route every such read through this normalizer before comparing/matching.
+ */
+const ISSUE_TYPE_LOCALE_ALIASES: Record<string, string> = {
+  historia: 'Story',
+  épica: 'Epic',
+  epica: 'Epic',
+  error: 'Bug',
+  tarea: 'Task',
+  subtarea: 'Subtask',
+};
+
+function canonicalIssueTypeName(name: string | undefined | null): string {
+  if (!name) { return 'Unknown'; }
+  const trimmed = name.trim();
+  return ISSUE_TYPE_LOCALE_ALIASES[trimmed.toLowerCase()] ?? trimmed;
+}
+
 let REGISTRY_CACHE: Registry | null = null;
 
 /**
@@ -929,7 +952,7 @@ function generateTraceabilitySection(
     const issue = link.inwardIssue || link.outwardIssue;
     if (!issue) { continue; }
 
-    const issueType = issue.fields.issuetype?.name || 'Other';
+    const issueType = canonicalIssueTypeName(issue.fields.issuetype?.name) || 'Other';
     const relation = link.inwardIssue ? link.type.inward : link.type.outward;
     const status = (issue.fields as Record<string, unknown>).status as { name: string } | undefined;
 
@@ -1428,7 +1451,7 @@ function generateStoryMarkdown(
   }
 
   lines.push(
-    `**Type:** ${String(fields.issuetype?.name || 'Story')}`,
+    `**Type:** ${canonicalIssueTypeName(fields.issuetype?.name) || 'Story'}`,
     `**Status:** ${String(fields.status?.name || 'Unknown')}`,
     `**Priority:** ${String(fields.priority?.name || 'Not set')}`,
     `**Story Points:** ${storyPoints ?? '-'}`,
@@ -2008,11 +2031,11 @@ function classifyCoverageLinks(issue: JiraIssue, reg: Registry): {
   for (const link of issue.fields.issuelinks ?? []) {
     const other = link.inwardIssue ?? link.outwardIssue;
     if (!other) { continue; }
-    const entry = reg.byJiraType.get(other.fields.issuetype?.name ?? '');
+    const entry = reg.byJiraType.get(canonicalIssueTypeName(other.fields.issuetype?.name));
     if (!entry) { continue; }
     const cl: CoverageLink = {
       key: other.key,
-      issueType: other.fields.issuetype?.name ?? '',
+      issueType: canonicalIssueTypeName(other.fields.issuetype?.name),
       summary: other.fields.summary,
       linkTypeName: link.type.name,
     };
@@ -2164,8 +2187,8 @@ async function syncEpic(
   // Fetch epic
   const epic = await fetchIssue(config, epicKey, EPIC_FIELDS);
 
-  if (epic.fields.issuetype?.name !== 'Epic') {
-    result.warnings.push(`${epicKey}: Not an Epic (is ${epic.fields.issuetype?.name})`);
+  if (canonicalIssueTypeName(epic.fields.issuetype?.name) !== 'Epic') {
+    result.warnings.push(`${epicKey}: Not an Epic (is ${canonicalIssueTypeName(epic.fields.issuetype?.name)})`);
     return null;
   }
 
@@ -2243,7 +2266,7 @@ async function syncSingleStory(
 
   const story = await fetchIssue(config, storyKey, STORY_FIELDS);
 
-  if (story.fields.issuetype?.name === 'Epic') {
+  if (canonicalIssueTypeName(story.fields.issuetype?.name) === 'Epic') {
     throw new Error(`${storyKey} is an Epic, not a Story. Use the epic path (pull --epic / get) instead.`);
   }
 
@@ -2426,14 +2449,14 @@ function findLinkedStory(defect: JiraIssue): { key: string, summary: string } | 
 
   for (const link of links) {
     // Check inward issues (e.g., "is caused by" Story)
-    if (link.inwardIssue?.fields.issuetype?.name === 'Story') {
+    if (link.inwardIssue && canonicalIssueTypeName(link.inwardIssue.fields.issuetype?.name) === 'Story') {
       return {
         key: link.inwardIssue.key,
         summary: link.inwardIssue.fields.summary,
       };
     }
     // Check outward issues (e.g., "causes" Story)
-    if (link.outwardIssue?.fields.issuetype?.name === 'Story') {
+    if (link.outwardIssue && canonicalIssueTypeName(link.outwardIssue.fields.issuetype?.name) === 'Story') {
       return {
         key: link.outwardIssue.key,
         summary: link.outwardIssue.fields.summary,
@@ -2721,7 +2744,7 @@ function renderAutoContent(issue: JiraIssue, entry: WorkTypeEntry, config: Confi
     '',
     `**Jira Key:** [${issue.key}](${config.displayUrl}/browse/${issue.key})`,
     `**Status:** ${f.status?.name ?? 'Unknown'}`,
-    `**Type:** ${f.issuetype?.name ?? entry.jiraIssueType}`,
+    `**Type:** ${canonicalIssueTypeName(f.issuetype?.name) || entry.jiraIssueType}`,
     '',
     '---',
     '',
@@ -2860,7 +2883,7 @@ async function routeIssueByKey(
   result: SyncResult,
 ): Promise<void> {
   const probe = await fetchIssue(config, key, ['issuetype', 'summary']);
-  const type = probe.fields.issuetype?.name ?? 'Unknown';
+  const type = canonicalIssueTypeName(probe.fields.issuetype?.name);
 
   if (type === 'Epic') {
     await syncEpic(config, key, options, result);
@@ -2956,7 +2979,7 @@ async function auditOrphanDefects(config: Config, options: SyncOptions, result: 
   for (const d of defects) {
     const hasParent = (d.fields.issuelinks ?? []).some((link) => {
       const other = link.inwardIssue ?? link.outwardIssue;
-      const e = other ? reg.byJiraType.get(other.fields.issuetype?.name ?? '') : undefined;
+      const e = other ? reg.byJiraType.get(canonicalIssueTypeName(other.fields.issuetype?.name)) : undefined;
       return e?.coverable === true && e.slug !== 'defect';
     });
     if (!hasParent) { orphans.push(d.key); }
