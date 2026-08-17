@@ -27,7 +27,7 @@ setup('API Setup: authenticate via API', async ({ api }) => {
   console.log('[API Setup] Starting API authentication...');
   console.log(`[API Setup] Target: ${config.apiUrl}${config.auth.loginEndpoint}`);
 
-  // Use AuthApi ATC (UPEX Dojo uses 'email' field)
+  // Use AuthApi ATC (Bunkai uses 'email' field, headless signin at /auth/signin)
   const credentials = {
     email: config.testUser.email,
     password: config.testUser.password,
@@ -43,15 +43,19 @@ setup('API Setup: authenticate via API', async ({ api }) => {
   });
 
   console.log('[API Setup] Authentication successful');
-  console.log(`[API Setup] Token type: ${tokenData.token_type}`);
-  console.log(`[API Setup] Expires in: ${tokenData.expires_in} seconds`);
+  console.log('[API Setup] Token type: Bearer (PAT)');
+  console.log(`[API Setup] PAT expires at: ${tokenData.pat.expires_at ?? 'never (long-lived)'}`);
 
-  // Save token to file for use by integration tests
+  // Save token to file for use by integration tests. The Bearer credential is
+  // pat.token, NOT session.access_token (that one is the Supabase SSR cookie
+  // session, not a Bearer credential).
   const apiState: ApiState = {
-    token: tokenData.access_token,
-    tokenType: tokenData.token_type,
-    expiresIn: tokenData.expires_in,
-    refreshToken: tokenData.refresh_token ?? null,
+    token: tokenData.pat.token,
+    tokenType: 'Bearer',
+    expiresIn: tokenData.pat.expires_at
+      ? Math.max(0, Math.floor((new Date(tokenData.pat.expires_at).getTime() - Date.now()) / 1000))
+      : config.auth.tokenLifetimeSeconds,
+    refreshToken: null,
     source: 'api-login',
     createdAt: new Date().toISOString(),
   };

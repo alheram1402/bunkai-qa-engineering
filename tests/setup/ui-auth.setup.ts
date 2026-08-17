@@ -1,19 +1,26 @@
 /**
  * KATA Architecture - UI Auth Setup
  *
- * Authenticates via the login page UI and intercepts the JWT token
- * using page.waitForResponse() - single authentication, no separate API call.
+ * Authenticates via the login page UI and intercepts the PAT issued by
+ * POST /api/v1/auth/signin using page.waitForResponse() - single
+ * authentication, no separate API call.
+ *
+ * Bunkai's auth is Supabase Auth/GoTrue-backed (NOT NextAuth). The password
+ * step of the two-step login form calls the SAME headless
+ * /api/v1/auth/signin endpoint used by scripts/api-login.ts, so the JSON
+ * response body also carries a freshly-minted PAT even though the browser
+ * primarily relies on the session cookie the route sets as a side-effect.
  *
  * This provides BOTH:
  * - Browser session (storageState) for UI tests
- * - API token (intercepted) for API calls within E2E tests
+ * - API token (intercepted PAT) for API calls within E2E tests
  *
  * Dependencies: global-setup
  * Dependents: e2e
  */
 
 import type { ApiState } from '@data/types';
-import type { TokenResponse } from '@schemas/auth.types';
+import type { LoginSuccessResponse } from '@schemas/auth.types';
 
 import { writeFileSync } from 'node:fs';
 import { test as setup } from '@TestFixture';
@@ -47,7 +54,8 @@ setup('UI Setup: authenticate via UI', async ({ ui, page }) => {
   };
 
   // Set up response interception BEFORE triggering login
-  // The login UI calls /api/auth/login after successful NextAuth sign-in
+  // The login UI's password step calls POST /api/v1/auth/signin directly
+  // (the same headless endpoint scripts/api-login.ts uses)
   const tokenPromise = page.waitForResponse(
     resp => resp.url().includes(config.auth.tokenEndpoint)
       && resp.request().method() === 'POST'
@@ -55,14 +63,14 @@ setup('UI Setup: authenticate via UI', async ({ ui, page }) => {
     { timeout: 30000 },
   );
 
-  // Use LoginPage ATC - triggers NextAuth sign-in + token fetch
+  // Use LoginPage ATC - triggers Supabase Auth sign-in + PAT mint
   await ui.login.loginSuccessfully(credentials);
   console.log('[UI Setup] UI login successful');
 
-  // Capture JWT token from intercepted response
+  // Capture the PAT from the intercepted sign-in response
   console.log('[UI Setup] Intercepting token from login response...');
   const response = await tokenPromise;
-  const tokenData = (await response.json()) as TokenResponse;
+  const tokenData = (await response.json()) as LoginSuccessResponse;
 
   // Attach to Allure for debugging
   await attachRequestResponseToAllure({
@@ -72,9 +80,9 @@ setup('UI Setup: authenticate via UI', async ({ ui, page }) => {
     requestBody: { email: credentials.email, password: '***' },
   });
 
-  // Verify token was obtained
-  if (!tokenData?.access_token) {
-    throw new Error('Token response missing access_token');
+  // Verify token was obtained (pat.token, NOT session.access_token)
+  if (!tokenData?.pat?.token) {
+    throw new Error('Sign-in response missing pat.token');
   }
 
   console.log('[UI Setup] Token intercepted successfully');
@@ -83,12 +91,14 @@ setup('UI Setup: authenticate via UI', async ({ ui, page }) => {
   await page.context().storageState({ path: storageStateFile });
   console.log(`[UI Setup] Storage state saved to ${storageStateFile}`);
 
-  // Save the token for API calls within E2E tests
+  // Save the PAT for API calls within E2E tests
   const apiState: ApiState = {
-    token: tokenData.access_token,
-    tokenType: tokenData.token_type,
-    expiresIn: tokenData.expires_in,
-    refreshToken: tokenData.refresh_token ?? null,
+    token: tokenData.pat.token,
+    tokenType: 'Bearer',
+    expiresIn: tokenData.pat.expires_at
+      ? Math.max(0, Math.floor((new Date(tokenData.pat.expires_at).getTime() - Date.now()) / 1000))
+      : config.auth.tokenLifetimeSeconds,
+    refreshToken: null,
     source: 'ui-login',
     createdAt: new Date().toISOString(),
   };

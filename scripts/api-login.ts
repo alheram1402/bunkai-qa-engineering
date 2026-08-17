@@ -97,15 +97,16 @@ const TOKENS_JSON_FILE = resolve(AUTH_DIR, 'tokens.json');
 
 // ╔══════════════════════════════════════════════════════════════════╗
 // ║  PROJECT-SPECIFIC AUTHENTICATION CONFIGURATION                  ║
-// ║  Adapt this section to match YOUR project's auth mechanism.     ║
-// ║  The boilerplate default uses POST /auth/login with             ║
-// ║  { email, password } → { access_token }.                       ║
-// ║  Your project may use OAuth2, API keys, or a different format.  ║
+// ║  Bunkai's headless sign-in: POST /api/v1/auth/signin with       ║
+// ║  { email, password } → { user, session, pat, warning }.         ║
+// ║  The Bearer credential is `pat.token`, NOT `session.access_token`║
+// ║  (that one is the Supabase SSR cookie session, not a Bearer      ║
+// ║  credential). See .context/reports/adapt-framework-plan.md §2.  ║
 // ╚══════════════════════════════════════════════════════════════════╝
 
 /**
  * Build the request body for the auth endpoint.
- * Override this for different auth formats (e.g., { username, password }, OAuth2 form data).
+ * Bunkai's /api/v1/auth/signin already matches this shape.
  */
 function buildAuthPayload(email: string, password: string): Record<string, string> {
   return { email, password };
@@ -113,10 +114,9 @@ function buildAuthPayload(email: string, password: string): Record<string, strin
 
 /**
  * Extract token fields from the auth response.
- * Override this if your API returns tokens in a different shape.
  *
- * Expected response format (default):
- *   { access_token: string, token_type: string, expires_in: number, refresh_token?: string }
+ * Bunkai response shape: { user, session, pat, warning } — the Bearer token
+ * to use for subsequent requests is `pat.token`, never `session.access_token`.
  */
 function extractTokenFromResponse(body: Record<string, unknown>): {
   accessToken: string
@@ -124,11 +124,24 @@ function extractTokenFromResponse(body: Record<string, unknown>): {
   expiresIn: number
   refreshToken: string | null
 } {
+  const pat = body.pat as { token?: string, expires_at?: string | null } | undefined;
+
+  // pat.expires_at is null by default (headless signin never passes
+  // pat_expires_in_days) — the PAT is effectively non-expiring. When null,
+  // fall back to the same conservative estimate used elsewhere
+  // (config.auth.tokenLifetimeSeconds) purely for display/metadata — nothing
+  // in this suite performs an actual staleness check on it (per-run mint).
+  const expiresIn = pat?.expires_at
+    ? Math.max(0, Math.floor((new Date(pat.expires_at).getTime() - Date.now()) / 1000))
+    : config.auth.tokenLifetimeSeconds;
+
   return {
-    accessToken: String(body.access_token ?? ''),
-    tokenType: String(body.token_type ?? 'Bearer'),
-    expiresIn: Number(body.expires_in ?? 86400),
-    refreshToken: body.refresh_token ? String(body.refresh_token) : null,
+    accessToken: String(pat?.token ?? ''),
+    tokenType: 'Bearer',
+    expiresIn,
+    // The PAT response carries no refresh token (session.refresh_token is a
+    // Supabase SSR cookie-session credential, not usable as a Bearer token).
+    refreshToken: null,
   };
 }
 
