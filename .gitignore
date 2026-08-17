@@ -37,6 +37,11 @@ node_modules/
 # ===== Auto-generated AI prompts (single-use, written by bun run update) =====
 /.agents/prompts/
 
+# ===== Community skills (T3/T4, installed by `bunx skills add`) =====
+# Reproducible from skills-lock.json (tracked, pins versions) + cli/install.ts
+# Step 9. Not hand-authored source — never commit the installed directories.
+/.agents/skills/
+
 # ===== Custom Reports =====
 /reports/
 *.json.bak
