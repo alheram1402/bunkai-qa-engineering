@@ -373,7 +373,7 @@ Installed into `.claude/skills/` via `bunx skills add` (project mode). Not commi
 | `playwright-best-practices` | `currents-dev/playwright-best-practices-skill` | Patterns / anti-flaky / axe-core / fixtures reference. Auto-loaded by `/test-automation` during the Code phase.                                        |
 | `resend-cli`                | `resend/resend-skills`                         | Resend email testing CLI. Pairs with the `resend` external binary verified in step 11. Project-level because email provider choice varies per project. |
 
-### User-level (global, 6 skills)
+### User-level (global, 7 skills)
 
 Installed with `bunx skills add <package> [--skill <name>] --global --yes` and useful across most projects regardless of stack.
 
@@ -385,6 +385,7 @@ Installed with `bunx skills add <package> [--skill <name>] --global --yes` and u
 | `brainstorming`       | `obra/superpowers`         | Pre-implementation ideation (framework features, test design edge cases) — universal |
 | `html-ppt`            | `lewislulu/html-ppt-skill` | HTML presentations for sprint planning / retro / demo decks — universal              |
 | `bun`                 | `bun.sh/docs`              | Bun runtime reference — universal across every project that uses bun                 |
+| `wokitoki`            | `upex-galaxy/agentic-user-skills` | Cross-project human-in-the-loop feedback CLI (`toki`) — blocking browser UI the AI drives mid-conversation to collect structured, anchored point-by-point answers — universal |
 
 ### Skipping or re-running
 

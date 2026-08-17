@@ -618,6 +618,7 @@ Commands are deterministic, single-purpose prompts invoked explicitly. Unlike sk
 | `/business-api-map`           | Generate or refresh `.context/business/business-api-map.md` (auth model, critical endpoints, architecture) |
 | `/fix-traceability`           | Repair broken TMS traceability links (US → ATP → ATR → TC) |
 | `/break-down-tests`           | Plain-English breakdown of automated tests for a given module / spec |
+| `/jira-instance-migration`    | Repoint the repo at a new Atlassian instance (`.env` + `.agents/project.yaml` + machine-global `acli` session) and regenerate the invalidated `.agents/` catalogs |
 
 All command definitions live under `.claude/commands/<name>.md`.
 

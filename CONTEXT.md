@@ -132,6 +132,8 @@ Workflow instructions and role-specific guidelines (TAE, QA, MCP usage) now live
 ├── test-automation/         → KATA test planning + coding + review
 ├── regression-testing/      → Regression execution + GO/NO-GO
 ├── git-flow-master/         → End-to-end Git operator: branch / commit / push / PR / conflict / chained-PR. Auto-detects branching strategy.
+├── pr-review-lead/          → QA Lead / Architect review of a PR's test-automation work against KATA doctrine, evidence-grounded findings. Distinct from `/judgment-day` (blind dual-adversarial) and default code-review (own uncommitted diff).
+├── bug-screenshot-annotation/ → Turns a raw bug screenshot into QA-style annotated evidence (circles/arrows/callouts) via local HTML+CSS overlays. Loaded inline by `/sprint-testing` Stage 2.
 ├── judgment-day/            → T2 vendored from gentle-ai (Apache-2.0): adversarial dual-judge review. Cited as optional gate by `/test-automation` Phase 3 + `/git-flow-master` pre-PR.
 ├── acli/                    → Atlassian CLI skill: Jira issue tracking + Modality jira-native TMS operations
 └── xray-cli/                → Xray TMS helper

@@ -128,6 +128,7 @@ Example: ❌ "Added `waitForResponse('**/api/auth/login')` before toast assertio
 | Test-architecture decision (record/supersede) | "record an ADR", "document our fixture/runner/isolation decision", "architecture decision record" | — (see `.context/ADR/README.md`) | `.context/ADR/`, `agentic-qa-core/references/adr-doctrine.md` | Read + Write |
 | Sync AI memory | "sync memory", `/sync-ai-memory` | `/sync-ai-memory` | `README.md`, this file, `.context/`, `package.json` | Edit |
 | Git / PR work | any git intent | `/git-flow-master` (auto) | `git status`, `git log` | `git` + `gh` |
+| Review a PR's test-automation work | "review this PR", "revisa este PR", "actúa de QA lead", "audita este pull request" | `/pr-review-lead` | target PR diff (own or external repo via `gh`), `test-automation/references/kata-architecture.md` + `typescript-patterns.md` + `review-checklists.md`, `agentic-qa-core/references/test-design-doctrine.md` + `defect-management-doctrine.md` | `gh` + Read |
 | Browser action | "screenshot", "trace", "record" | `/playwright-cli` | — | Playwright CLI |
 | Jira / Xray operation | "Jira issue", "Xray import" | `/acli` or `/xray-cli` | `.agents/jira-required.yaml`, `.agents/jira-fields.json` | CLI |
 | Any script / build / test command question | "what command runs X", "how do I run tests" | — | **READ `package.json` FIRST** | — |
@@ -184,6 +185,7 @@ Full contract: `.claude/skills/agentic-qa-core/references/skill-composition-stra
 | `acli` | `/acli` | Atlassian CLI. Resolves `[ISSUE_TRACKER_TOOL]` and `[TMS_TOOL]` (Modality jira-native). |
 | `git-flow-master` | (auto on git/PR intents) | End-to-end Git operator. Auto-detects branching strategy. Owns branch / commit / push / PR / conflict / chained-PR. |
 | `judgment-day` | `/judgment-day`, `juzgar`, `dual review` | T2 vendored from gentle-ai (Apache-2.0). Adversarial dual-judge review (2 blind judges in parallel, synthesis, fix loop, re-judge). Cited as optional gate by `/test-automation` Phase 3 + `/git-flow-master` pre-PR. Never auto-invoked. |
+| `pr-review-lead` | "review this PR", "revisa este PR", "actúa de QA lead" | QA Lead / Architect review of a PR's test-automation work against this repo's KATA doctrine (or the target repo's own doctrine) + general QA best practices, every finding grounded in a doctrine citation or code location. Runs a strictness preflight (Flexible/Standard/Strict) first; never posts to GitHub without explicit user OK. Distinct from `/judgment-day` (blind dual-adversarial pass/fail) and the default code-review flow (own uncommitted diff). |
 
 ### Commands (single-file utilities in `.claude/commands/`)
 
@@ -440,6 +442,96 @@ Engram MCP configured. Call `mem_save` IMMEDIATELY (no user prompt needed) after
 - **Session close** — MANDATORY `mem_session_summary` before saying "done" / "listo".
 
 Self-check after every task: *did I make decision, fix bug, learn something non-obvious, or establish convention? If yes → `mem_save` NOW.*
+
+---
+
+## 13. PROJECT DISCOVERY & ADAPTATION RESULTS
+
+> Session-generated results from `/project-discovery`, `/business-*-map`, `/master-test-plan`, and `/adapt-framework` runs against Bunkai TMS. Appended/patched by those regenerative commands per the §2 Behavioral Layer exemption ("regen IS task") — not hand-authored narrative subject to the same edit caution as §0-§12. Folded into the formal §0-§13 contract 2026-08-14 (previously un-numbered tail content, flagged as structural drift by `/sync-ai-memory`).
+
+### 13.1 Project Assessment (Phase 1)
+
+Assessment Date: 2026-08-13
+
+#### Testing Maturity: 2/4
+- Current state: Moderate
+- Test files: 132 (`*.test.ts` / `*.test.tsx`), colocated with source — spans `app/api/v1/**/route.test.ts` (API-route integration coverage), `components/tests/`, `lib/tests/`, and per-module `*.test.ts` beside implementation files
+- Frameworks: Bun's built-in test runner (`bun test`) — no `vitest`/`jest`/`playwright` devDependency, no `test` script defined in `package.json`
+- Coverage: unknown — no coverage tool wired in, no `test` script to invoke the suite as a whole
+- No E2E automation detected (no Playwright/Cypress config or spec files)
+
+#### Documentation State: Complete
+- README: yes (37 KB, product-facing)
+- API docs: yes — `app/qa/qa-config.ts` documents API contracts inline; target repo also ships its own `.context/SRS/api-contracts.yaml` (not read this session, per user's fresh-discovery instruction)
+- Architecture: yes — target repo has `DESIGN.md`, `CLAUDE.md`, `CONTEXT.md`, `INSTALLER.md`
+- Setup guide: yes — `cli/doctor.ts` + `cli/install.ts` (`bun run setup`)
+
+#### Code Quality
+- [x] ESLint: configured (`eslint.config.js`, `@antfu/eslint-config`)
+- [x] Prettier: configured (`prettier` devDependency, `format:check`/`format:fix` scripts)
+- [x] TypeScript: strict (`compilerOptions.strict: true`)
+- [x] Pre-commit hooks: configured (Husky `pre-commit` runs `lint-staged` + `types:check`/`vars:check`/`skills:check`; `pre-push` runs full `format:check && lint:check && vars:env:check && skills:registry:check`)
+
+#### CI/CD Maturity: None
+- No `.github/workflows/` directory in the target repo — no automated build, lint, test, or deploy pipeline. All quality gates are local (Husky hooks) only.
+
+#### Identified Risks
+
+| Risk | Severity | Mitigation |
+|------|----------|------------|
+| No CI/CD pipeline | HIGH | Existing 132 unit/integration tests are never run automatically on push/PR — a regression can merge to `main` undetected. Recommend a minimal GitHub Actions workflow running `bun test` + `repo:check` as a first step. |
+| No `test` script / no CI gate on the 132 existing tests | MEDIUM | Tests are only as good as someone remembering to run `bun test` locally. Add a `"test": "bun test"` script and wire it into pre-push or CI. |
+| No E2E coverage | MEDIUM | Confirms the QA gap this boilerplate exists to close — full E2E/API automation via KATA is the expected next step, not a pre-existing gap to fix in the target repo. |
+| No hardcoded secrets found in `app/lib/components` sweep | — (clear) | Grep hits were documentation/comment examples (`qa-config.ts`) and test fixture tokens (`mark-step-view.test.ts`), not real leaked credentials. No action needed. |
+
+#### Phase Prioritization
+
+- Phase 1: Normal — target repo has a rich, well-structured schema (68 Supabase migrations) and clear route/entity boundaries; discovery proceeded without ambiguity.
+- Phase 2: Normal — target's own SRS/PRD exist for cross-reference-free re-derivation; standard depth is sufficient.
+- Phase 3: Extended — no CI/CD and no `test` script means Infrastructure phase needs to document *how tests would run* (test commands, env vars) more prescriptively than a repo with existing CI to just read from.
+- Phase 4: Normal — Jira/Atlassian already configured in `.agents/project.yaml`.
+
+#### Blockers
+- [ ] None blocking — no HIGH-severity blocker requires resolution before Phase 2. The "No CI/CD pipeline" risk is HIGH-impact but does not block discovery; it is a finding to hand off, not a precondition.
+
+### 13.2 Phase 2 Progress - PRD
+
+- [x] `.context/PRD/executive-summary.md` — 5 core capabilities, 8/8 sections
+- [x] `.context/PRD/user-personas.md` — 3 personas (Viewer, Member/QA Engineer, Admin+Owner)
+- [x] `.context/PRD/user-journeys.md` — 4 journeys incl. P0 Run→Bug flow
+- [ ] `.context/business/business-feature-map.md` — **pending**, deferred to a standalone `/business-feature-map` command run (token-heavy, run in a clean session per skill doctrine)
+
+### 13.3 Business Data Map
+
+`.context/business/business-data-map.md` — the canonical "what this system does" map (31 entities, 7 flows, 7 state machines, 10 DB triggers incl. the unified `bunkai_bugs_check_consistency` backstop, external integrations). Generated 2026-08-13 by `/project-discovery` Context Generators step. Read this before `/master-test-plan`.
+
+### 13.4 Business API Map
+
+`.context/business/business-api-map.md` — the "how the business operates through the API" narrative (3 auth tiers: Public / Cookie Session / Bearer PAT; 7 critical journeys incl. P0 Run→Bug; architecture layers Edge→Route Handlers→domain services→Postgres RLS+RPCs; 6 external integrations). Generated 2026-08-13 by `/business-api-map`. No committed OpenAPI spec exists in target — journeys derived from route-scanned source, not a spec. Its journeys' Feature ID pointers are stale ("not available") — `business-feature-map.md` (below) now exists with the FEAT-NNN catalog; a re-run would backfill them.
+
+### 13.5 Business Feature Map
+
+`.context/business/business-feature-map.md` — full feature inventory: 42 features across 12 domains (11 Core, 31 Secondary, 0 Beta, 0 Planned — zero TODO/FIXME/WIP found project-wide). CRUD matrix flags two orphans: `feature_flags` table has no application-code reachability, and Workspace Member has no admin re-role/remove-another-member route (self-leave only). Highest QA-leverage gap: zero component-layer test coverage (0/132 test files touch `components/**`) plus zero E2E project-wide — Run execution and Bug lifecycle (both P0-adjacent) have no component/E2E coverage at all. Generated 2026-08-13 by `/business-feature-map`.
+
+### 13.6 Master Test Plan
+
+`.context/master-test-plan.md` — risk-ranked test roadmap synthesized from the three business maps above. 5 CRITICAL flows (Run→Bug P0, ATC authoring, Bug lifecycle, multi-tenant RLS isolation, cookie-vs-PAT auth parity), 3 HIGH (workspace bootstrap, invite acceptance, notification delivery). 3 silent killers flagged: notification-trigger failures have zero error surface, Realtime WebSocket degrades silently (via `run_atcs`/`run_steps`/`notifications` only — `runs` itself is NOT in the realtime publication, corrected 2026-08-13), and — meta-level — no CI/CD in the *target* repo means its 132 unit tests never run automatically (this boilerplate's own CI, wired by `/adapt-framework` below, is a separate concern). Multi-tenant-isolation CRITICAL rating is **no longer provisional** — a full 31/31-table RLS sweep (2026-08-13) found zero deviation. Generated 2026-08-13 by `/master-test-plan`, gap-resolved same day.
+
+### 13.7 Framework Adaptation
+
+`/adapt-framework` completed 2026-08-13 against Bunkai TMS. Plan: `.context/reports/adapt-framework-plan.md` (Status: COMPLETED).
+
+- **Auth wired**: HYBRID — Supabase SSR cookie session for UI (`LoginPage.ts`, two-step form: `login-email`→`login-continue`→`login-password`→`login-signin`, happy-path only, OTP/signup branches deferred), Bearer PAT for API/agentic (`POST /api/v1/auth/signin` → nested `{user,session,pat}` response — `scripts/api-login.ts` reads `body.pat.token`, NOT `body.session.access_token`; PAT has no default expiry). Verify endpoint: `GET /api/v1/me`.
+- **First entity wired**: ATC (Acceptance Test Case), API-only (`AtcsApi.ts`, 5 ATCs `BK-201`-`BK-205`: create, create-without-AC-anchor→422, update via `X-If-Match` custom header, duplicate, search). `AuthApi.ts` carries `BK-101`/`BK-102`. Follow-up entities (not built): Test, Run, Bug — endpoints already catalogued in `business-feature-map.md`/`business-api-map.md`.
+- **OpenAPI source**: live-synced from `https://staging-upexbunkai.vercel.app/api/openapi` (runtime-generated spec, 64 endpoints) — real types in `api/openapi-types.ts`, not hand-written. **Known environment bug (resolved for this repo)**: `bun run api:sync`'s type-generation step crashes when run from a directory path containing `#` — `@redocly/openapi-core`'s resolver misreads the `#` as a URL fragment delimiter. The repo's parent dir was `...Dojo #4...` when this was first hit; worked around manually mid-session (generated in a `#`-free scratch dir, copied back), then the parent dir itself was renamed to `...Dojo 4...` (no `#`), fixing it going forward for this repo. **Still an unresolved framework defect** for anyone else who hits a `#` in their own path — `scripts/sync-openapi.ts` should run the type-gen subprocess from a safe cwd regardless. Candidate for `/framework-development`.
+- **Environment scope**: `local` + `staging` only this run. `production` stays unwired in `config/variables.ts`/CI (still declared in `.agents/project.yaml`, unused).
+- **Validation gate**: all 11 Phase 8 steps passed (`repo:check` exit 0, 5 `@critical` tests pass live on staging). Session reuse (`.auth/*` across two `test:smoke` runs) is NOT achieved — by design, not a defect: the plan's chosen token strategy is per-run mint with no staleness check.
+- **Open gaps**:
+  - `DBHUB_*` — **resolved 2026-08-14** from Epic [BK-29](https://upexgalaxy71.atlassian.net/browse/BK-29): `.env` now carries the `qa_inspector_ro` Session Pooler role (read-only, BYPASSRLS — sees all tenants) as default; `qa_inspector_rw` pair kept as a comment for tests needing writes. Existing `dbhub.toml` (single `primary` source, `${VAR}` interpolation) needed no change. **Restart the agent session** for the `dbhub` MCP to pick up the new env (cached at spawn, Rule #10).
+  - `LOCAL_USER_EMAIL`/`LOCAL_USER_PASSWORD` intentionally empty — `local` env is scaffolded but unverified; do not trust a `local`-targeted test run as a real signal until populated.
+  - `gh-pages` NOT enabled on this repo (only `main` branch exists on `origin`) — reports aren't browsable yet; run `regression-testing/references/github-pages-setup.md`'s maneuver when ready.
+  - CI secrets pushed via `gh secret set`: `STAGING_USER_EMAIL/PASSWORD`, `ATLASSIAN_*`, `AUTO_SYNC`. Still owed: `LOCAL_USER_EMAIL/PASSWORD` (once populated).
+  - `/sync-ai-memory` handoff — done 2026-08-14 (README/CLAUDE.md/INSTALLER/CONTEXT/docs synced; 6 real drifts fixed, no `upexgalaxy`/`UPEX`/`dojo` leftovers found in scope). This §13 renumbering closed the structural-drift finding it surfaced.
 
 ---
 
