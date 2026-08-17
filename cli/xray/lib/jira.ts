@@ -5,11 +5,63 @@
  */
 
 import type { JiraIssue } from '../types/index.js';
+import { normalizeAtlassianUrl, readAtlassianUrlFromYaml } from '../../lib/atlassian-instance';
 import { loadConfig } from './config.js';
 
 // ============================================================================
 // JIRA REST API CLIENT
 // ============================================================================
+
+/**
+ * Resolves the Jira host used for REST lookups. Precedence:
+ *   1. `~/.xray-cli/config.json` -> jira_base_url             (the login's decision)
+ *   2. `.agents/project.yaml` -> issue_tracker.atlassian_url  (versioned, reviewable)
+ *   3. `ATLASSIAN_URL` env var                                (last resort)
+ *
+ * The stored config stays FIRST because it is not a passive cache: it is what
+ * `auth login` decided, and that decision may have come from an explicit
+ * `--jira-url` (the documented way to point the CLI at another site). Demoting it
+ * below the yaml would silently discard that override at request time while
+ * `auth status` still reported it, which is worse than the problem being fixed.
+ *
+ * The yaml sits ABOVE the env var, though, and that is the actual fix here. When
+ * no login has run, the old code fell straight through to `ATLASSIAN_URL` — the
+ * variable that survives a site migration inside an inherited process
+ * environment. The hazard is not cosmetic: `resolveIssueId` turns a Jira key into
+ * a NUMERIC id, and that id is fed to Xray mutations that write run statuses and
+ * link defects. Resolve the key against the wrong site and the id may still exist
+ * on the right one, pointing at an unrelated issue.
+ *
+ * The Xray API itself is unaffected: XRAY_AUTH_URL / XRAY_GRAPHQL_URL are fixed
+ * global endpoints, and the instance is identified by the client id/secret pair.
+ * Only these Jira REST lookups need a host.
+ *
+ * A stored host that disagrees with the yaml is reported once per process: the
+ * config is machine-global, written once, and never revisited, so after a site
+ * migration it keeps pointing at the old instance until someone re-runs login.
+ *
+ * Returns `null` when no source is set (callers already treat that as
+ * "credentials not configured" and surface a guiding error).
+ */
+let staleConfigReported = false;
+function resolveJiraBaseUrl(configuredBaseUrl: string | undefined): string | null {
+  const configUrl = normalizeAtlassianUrl(configuredBaseUrl);
+  const yamlUrl = readAtlassianUrlFromYaml();
+
+  if (configUrl) {
+    if (yamlUrl && !staleConfigReported && configUrl.toLowerCase() !== yamlUrl.toLowerCase()) {
+      staleConfigReported = true;
+      console.warn(
+        `⚠ xray: stored Jira host (${configUrl}) disagrees with .agents/project.yaml (${yamlUrl}). `
+        + 'Using the stored value, since it is what `xray auth login` recorded. If the site was '
+        + 'migrated, re-run `bun xray auth login` to refresh ~/.xray-cli/config.json.',
+      );
+    }
+    return configUrl;
+  }
+
+  return yamlUrl ?? normalizeAtlassianUrl(process.env.ATLASSIAN_URL);
+}
 
 /**
  * Look up a Jira issue by key to get its numeric ID
@@ -18,7 +70,7 @@ import { loadConfig } from './config.js';
 export async function getJiraIssueId(key: string): Promise<string | null> {
   const config = loadConfig();
 
-  const baseUrl = config?.jira_base_url || process.env.ATLASSIAN_URL;
+  const baseUrl = resolveJiraBaseUrl(config?.jira_base_url);
   const email = config?.jira_email || process.env.ATLASSIAN_EMAIL;
   const token = config?.jira_api_token || process.env.ATLASSIAN_API_TOKEN;
 
@@ -57,7 +109,7 @@ export async function getJiraIssueId(key: string): Promise<string | null> {
  */
 export async function listProjects(): Promise<Array<{ key: string, name: string, id: string }> | null> {
   const config = loadConfig();
-  const baseUrl = config?.jira_base_url || process.env.ATLASSIAN_URL;
+  const baseUrl = resolveJiraBaseUrl(config?.jira_base_url);
   const email = config?.jira_email || process.env.ATLASSIAN_EMAIL;
   const token = config?.jira_api_token || process.env.ATLASSIAN_API_TOKEN;
 
@@ -207,7 +259,7 @@ export interface LinkedTest {
  */
 export async function getLinkedTests(issueKey: string): Promise<LinkedTest[] | null> {
   const config = loadConfig();
-  const baseUrl = config?.jira_base_url || process.env.ATLASSIAN_URL;
+  const baseUrl = resolveJiraBaseUrl(config?.jira_base_url);
   const email = config?.jira_email || process.env.ATLASSIAN_EMAIL;
   const token = config?.jira_api_token || process.env.ATLASSIAN_API_TOKEN;
 
