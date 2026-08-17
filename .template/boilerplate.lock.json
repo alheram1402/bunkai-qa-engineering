@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 7,
+  "templateRepo": "upex-galaxy/agentic-qa-boilerplate",
+  "templateCommit": "a31b6e1908ee69b224042d7e7a07c7f3efbebaa8",
+  "perComponentCommit": {
+    "skills": "a31b6e1908ee69b224042d7e7a07c7f3efbebaa8",
+    "commands": "a31b6e1908ee69b224042d7e7a07c7f3efbebaa8",
+    "scripts": "a31b6e1908ee69b224042d7e7a07c7f3efbebaa8",
+    "docs": "a31b6e1908ee69b224042d7e7a07c7f3efbebaa8",
+    "cli": "a31b6e1908ee69b224042d7e7a07c7f3efbebaa8",
+    "vscode": "a31b6e1908ee69b224042d7e7a07c7f3efbebaa8",
+    "husky": "a31b6e1908ee69b224042d7e7a07c7f3efbebaa8",
+    "agents-docs": "a31b6e1908ee69b224042d7e7a07c7f3efbebaa8",
+    "claude-config": "a31b6e1908ee69b224042d7e7a07c7f3efbebaa8",
+    "tooling": "a31b6e1908ee69b224042d7e7a07c7f3efbebaa8",
+    "env-template": "a31b6e1908ee69b224042d7e7a07c7f3efbebaa8"
+  },
+  "syncedComponents": [],
+  "ignoreFileSync": {},
+  "packageJsonSync": {
+    "package.json": {
+      "scripts": {
+        "lastSyncedSha": "cd5a302ce987aa16037b9337bc3a5f266298c292",
+        "appliedKeys": []
+      },
+      "devDependencies": {
+        "lastSyncedSha": "cd5a302ce987aa16037b9337bc3a5f266298c292",
+        "appliedKeys": []
+      },
+      "dependencies": {
+        "lastSyncedSha": "cd5a302ce987aa16037b9337bc3a5f266298c292",
+        "appliedKeys": []
+      },
+      "lint-staged": {
+        "lastSyncedSha": "cd5a302ce987aa16037b9337bc3a5f266298c292",
+        "appliedKeys": []
+      }
+    }
+  },
+  "cliVersion": "7.0",
+  "lastSyncedAt": "2026-08-17T00:25:58.691Z",
+  "variableSystemVersion": 1
+}
