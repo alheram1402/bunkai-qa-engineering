@@ -26,21 +26,30 @@ export interface TestCredentials {
 }
 
 // ============================================
-// Project-Specific Types (example structure)
+// Project-Specific Types (Bunkai domain: ATC)
 // ============================================
 
-export interface TestHotel {
-  name: string
-  organizationId?: number
-  invoiceCap?: number
-}
-
-export interface TestBooking {
-  confirmationNumber: string
-  hotelId: number
-  stayValue: number
-  checkInDate: string
-  emailHash?: string
+/**
+ * The fabricatable slice of an ATC create/update body — title, layer, tags,
+ * steps, and assertions can all be generated with faker. The identity chain
+ * (`module_id`, `user_story_id`, `acceptance_criterion_ids`) CANNOT be
+ * fabricated — those must reference real, already-existing hierarchy
+ * entities, so callers merge them in separately when building the real
+ * `CreateAtcRequest` / `UpdateAtcRequest` (see `api/schemas/atcs.types.ts`).
+ */
+export interface TestAtc {
+  title: string
+  layer: 'UI' | 'API' | 'Unit'
+  tags: string[]
+  steps: {
+    position: number
+    content: string
+    input_data?: string | null
+    expected?: string | null
+  }[]
+  assertions: {
+    content: string
+  }[]
 }
 
 // ============================================

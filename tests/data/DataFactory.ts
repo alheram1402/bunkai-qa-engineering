@@ -9,7 +9,7 @@
  *   - Import directo: import { DataFactory } from '@DataFactory'
  */
 
-import type { TestBooking, TestCredentials, TestHotel, TestUser } from './types';
+import type { TestAtc, TestCredentials, TestUser } from './types';
 
 import { faker } from '@faker-js/faker';
 
@@ -75,33 +75,32 @@ export class DataFactory {
   }
 
   // ============================================
-  // PROJECT-SPECIFIC (example structure)
+  // PROJECT-SPECIFIC (Bunkai domain: ATC)
   // ============================================
 
   /**
-   * Genera datos de Hotel para testing
-   * TODO: Expandir cuando se necesite
+   * Genera la porción fabricable de un ATC (title, layer, tags, steps,
+   * assertions). NO incluye module_id/user_story_id/acceptance_criterion_ids
+   * — esos identificadores deben referenciar entidades reales ya existentes
+   * y se combinan aparte al construir el CreateAtcRequest/UpdateAtcRequest
+   * real (ver api/schemas/atcs.types.ts).
    */
-  static createHotel(overrides?: Partial<TestHotel>): TestHotel {
+  static createAtc(overrides?: Partial<TestAtc>): TestAtc {
     return {
-      name: `Test Hotel ${faker.location.city()}`,
-      organizationId: faker.number.int({ min: 1, max: 100 }),
-      invoiceCap: faker.number.int({ min: 1000, max: 50000 }),
-      ...overrides,
-    };
-  }
-
-  /**
-   * Genera datos de Booking para testing
-   * TODO: Expandir cuando se necesite
-   */
-  static createBooking(overrides?: Partial<TestBooking>): TestBooking {
-    return {
-      confirmationNumber: `CONF-${faker.string.alphanumeric(8).toUpperCase()}`,
-      hotelId: faker.number.int({ min: 1, max: 1000 }),
-      stayValue: faker.number.float({ min: 100, max: 5000, fractionDigits: 2 }),
-      checkInDate: faker.date.future().toISOString().split('T')[0],
-      emailHash: faker.string.alphanumeric(32),
+      title: `Test ATC ${faker.hacker.verb()} ${faker.string.alphanumeric(6)}`,
+      layer: 'API',
+      tags: [faker.word.sample()],
+      steps: [
+        {
+          position: 1,
+          content: faker.lorem.sentence(),
+          input_data: null,
+          expected: faker.lorem.sentence(),
+        },
+      ],
+      assertions: [
+        { content: faker.lorem.sentence() },
+      ],
       ...overrides,
     };
   }
