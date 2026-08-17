@@ -6,12 +6,12 @@
  * Use this barrel only when you need types from multiple domains in one file.
  *
  * Usage:
- *   import type { LoginPayload, TokenResponse } from '@schemas/auth.types';  // preferred
- *   import type { LoginPayload, Booking } from '@schemas';                   // cross-domain
+ *   import type { LoginPayload, LoginSuccessResponse } from '@schemas/auth.types';  // preferred
+ *   import type { LoginPayload, Atc } from '@schemas';                              // cross-domain
  */
 
+export type * from './atcs.types';
 export type * from './auth.types';
 
-// Add new domain facades here:
-// export type * from './bookings.types';
-// export type * from './users.types';
+// Add new domain facades here (e.g. workspaces, projects, modules, user-stories):
+// export type * from './workspaces.types';
