@@ -33,6 +33,7 @@ testing:
 
 qa:
   formal_blocked_gate: true # When true and the substrate exposes a `blocked` story status, FAILED stories dispatch `defect_reported` (in_test -> blocked). When false (or no `blocked` slug), the skill leaves the story in `in_test` with the linked bug — non-strict fallback. See sprint-testing/references/sprint-orchestration.md Briefing 4 Step 5.
+  qa_artifact_label: QA-Artifact # Label applied to all four QA process epics so tooling (scripts/sync-jira-issues.ts) can tell a QA bucket apart from a product epic. See defect-management-doctrine.md.
   # QA process epics — buckets that hold QA artifacts so they never pollute product epics/roadmap.
   # FOUR QA-process epics form the QA-governance cluster: Test Plans parent to `master_test_plan_epic`;
   # Test (TC) issues parent to `test_repository_epic`; Test Executions/Preconditions/Test Sets parent to
@@ -45,16 +46,16 @@ qa:
     master_test_plan_epic:
       name: QA Master Test Plan # the MTP — parent of every Test Plan (FTP/STP/ATP); description mirrors
       # .context/master-test-plan.md + points to the official QA repo; cross-linked to the 3 sibling QA epics
-      key: null # discovered/created at runtime, then cached here (e.g. PROJ-100)
+      key: BK-514 # discovered 2026-08-21 (Stage 1 sprint-testing BK-202 find-or-create check) — already existed, not created this session
     test_repository_epic:
       name: QA Test Repository # convention name; holds every Test (TC) issue
       key: null # discovered/created at runtime, then cached here (e.g. PROJ-456)
     test_artifacts_epic:
       name: QA Test Artifacts # holds every Test Execution (FTR/STR/ATR), Precondition, Test Set
-      key: null # discovered/created at runtime, then cached here (e.g. PROJ-789)
+      key: BK-515 # discovered 2026-08-21 (Stage 1 sprint-testing BK-202 find-or-create check) — already existed, not created this session
     defect_epic:
       name: QA Defect Management # convention name; the `QA ` prefix marks a process epic, not product
-      key: null # discovered/created at runtime, then cached here (e.g. PROJ-123)
+      key: BK-183 # discovered 2026-08-21 (Stage 3 sprint-testing BK-202 find-or-create check) — already existed, not created this session
 
 # Git workflow for THIS project — the SOURCE OF TRUTH read by the git-flow-master skill
 # before any git/gh operation. Ships `null` (template): on the first git intent git-flow-master
