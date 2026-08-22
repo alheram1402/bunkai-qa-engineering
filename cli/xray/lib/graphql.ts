@@ -255,6 +255,36 @@ export const QUERIES = {
     }
   `,
 
+  // Xray-only associations for `test enrich`: Precondition content (inlined
+  // into the synced Test .md, so the definition is selected, not just the key)
+  // and Test Set membership. Neither is a Jira issue link, which is exactly why
+  // the Jira REST sync cannot see them and this query exists.
+  getTestsEnrichment: `
+    query GetTestsEnrichment($jql: String, $limit: Int!) {
+      getTests(jql: $jql, limit: $limit) {
+        total
+        results {
+          issueId
+          jira(fields: ["key"])
+          preconditions(limit: 50) {
+            results {
+              issueId
+              preconditionType { name }
+              definition
+              jira(fields: ["key", "summary"])
+            }
+          }
+          testSets(limit: 50) {
+            results {
+              issueId
+              jira(fields: ["key", "summary"])
+            }
+          }
+        }
+      }
+    }
+  `,
+
   getTestsFullData: `
     query GetTestsFullData($jql: String, $limit: Int!, $start: Int!) {
       getTests(jql: $jql, limit: $limit, start: $start) {
@@ -303,6 +333,41 @@ export const QUERIES = {
             results { issueId jira(fields: ["key"]) }
           }
           jira(fields: ["key", "summary", "description", "labels"])
+        }
+      }
+    }
+  `,
+
+  // Lean Precondition projections for `precondition list` / `precondition get`.
+  // getPreconditionsFullData below stays the backup-oriented superset (folder,
+  // pagination); these two carry only what an operator reads at the terminal.
+  getPreconditions: `
+    query GetPreconditions($jql: String, $limit: Int!) {
+      getPreconditions(jql: $jql, limit: $limit) {
+        total
+        results {
+          issueId
+          preconditionType { name }
+          jira(fields: ["key", "summary", "status"])
+        }
+      }
+    }
+  `,
+
+  // Single Precondition detail, addressable by JQL (key) or numeric issueId —
+  // same dual-handle rationale as getTest / getTestById.
+  getPrecondition: `
+    query GetPrecondition($jql: String, $issueIds: [String]) {
+      getPreconditions(jql: $jql, issueIds: $issueIds, limit: 1) {
+        results {
+          issueId
+          preconditionType { name kind }
+          definition
+          tests(limit: 100) {
+            total
+            results { issueId jira(fields: ["key", "summary"]) }
+          }
+          jira(fields: ["key", "summary", "description", "status", "labels"])
         }
       }
     }
@@ -745,6 +810,12 @@ export const MUTATIONS = {
     }
   `,
 
+  removePreconditionsFromTest: `
+    mutation RemovePreconditionsFromTest($issueId: String!, $preconditionIssueIds: [String!]!) {
+      removePreconditionsFromTest(issueId: $issueId, preconditionIssueIds: $preconditionIssueIds)
+    }
+  `,
+
   addTestsToTestPlan: `
     mutation AddTestsToTestPlan($issueId: String!, $testIssueIds: [String!]!) {
       addTestsToTestPlan(issueId: $issueId, testIssueIds: $testIssueIds) {
@@ -757,6 +828,24 @@ export const MUTATIONS = {
   removeTestsFromTestPlan: `
     mutation RemoveTestsFromTestPlan($issueId: String!, $testIssueIds: [String!]!) {
       removeTestsFromTestPlan(issueId: $issueId, testIssueIds: $testIssueIds)
+    }
+  `,
+
+  // Plan <-> Execution association (verified by schema introspection 2026-08).
+  // The pair mirrors addTestsToTestPlan / removeTestsFromTestPlan, over
+  // Execution issueIds instead of Test issueIds.
+  addTestExecutionsToTestPlan: `
+    mutation AddTestExecutionsToTestPlan($issueId: String!, $testExecIssueIds: [String!]!) {
+      addTestExecutionsToTestPlan(issueId: $issueId, testExecIssueIds: $testExecIssueIds) {
+        addedTestExecutions
+        warning
+      }
+    }
+  `,
+
+  removeTestExecutionsFromTestPlan: `
+    mutation RemoveTestExecutionsFromTestPlan($issueId: String!, $testExecIssueIds: [String!]!) {
+      removeTestExecutionsFromTestPlan(issueId: $issueId, testExecIssueIds: $testExecIssueIds)
     }
   `,
 
