@@ -1,58 +1,96 @@
-# BK-202 — Acceptance Test Plan (QA)
+# ACCEPTANCE TEST PLAN (ATP): ATP: BK-202: TMS-Test Plan | Create a test plan grouping tests for a goal
 
-> Jira field: `customfield_10067` · [View in Jira](https://jira.upexgalaxy.com/browse/BK-202)
+**Jira Key:** [BK-573](https://jira.upexgalaxy.com/browse/BK-573)
+**Status:** Planificación
+**Components:** None
 
-# Acceptance Test Plan (ATP) — Shift-Left DRAFT
-
-> Condensed for the Jira ATP field's content limit. Full analysis (Critical Analysis, Story Quality Analysis detail, per-outline preconditions) lives in the local working file: `.context/PBI/epics/EPIC-BK-201-test-plans-milestones/stories/STORY-BK-202-tms-test-plan-create-a-test-plan-grouping-tests-fo/shift-left-refinement.md`.
-
-## Refined Acceptance Criteria (19 scenarios)
-
-1. Create a test plan with name, description, and goal (explicit)
-2. Create a minimal test plan with name only (explicit)
-3. Accept a test plan name at exactly the 100-character boundary (explicit)
-4. Reject a test plan name exceeding the 100-character boundary (explicit)
-5. Accept a test plan name that trims to exactly 1 character (explicit)
-6. Reject a duplicate plan name differing only by case (explicit)
-7. Reject a duplicate name padded with leading/trailing spaces (explicit)
-8. Allow the same plan name to be reused in a different project (explicit)
-9. Reject a duplicate name padded with a tab or non-breaking space — NEEDS PO/DEV CONFIRMATION
-10. Reject a plan rename that collides with another existing plan's name — NEEDS PO/DEV CONFIRMATION
-11. Reject one of two concurrent create requests for the same plan name (race condition) — NEEDS PO/DEV CONFIRMATION
-12. Reject a whitespace-only plan name (explicit)
-13. Reject an empty-string plan name (explicit)
-14. Reject a name made only of tab/newline whitespace — NEEDS PO/DEV CONFIRMATION
-15. Hide the create-plan option from a viewer-role user (explicit)
-16. Reject a direct API create-plan request from a viewer-role user — NEEDS PO/DEV CONFIRMATION
-17. Allow a member-role user to edit an existing plan they did not create (explicit)
-18. Reject a viewer's inline-edit attempt on an existing plan (explicit)
-19. Re-verify role server-side even with a stale client-cached role — NEEDS PO/DEV CONFIRMATION
-
-## Outline Coverage Estimate
-
-- Positive: 6
-- Negative: 6
-- Boundary: 3
-- Integration: 4
-- ***Total******:****** 19*** (13 explicit, 6 NEEDS PO/DEV CONFIRMATION)
-
-## Open Questions for PO / Dev
-
-### Critical (block sprint planning)
-
-1. Should BK-202 stay in Estimation until epic BK-24 (Tests) ships, or is the plan container decoupled enough to build and estimate now against a stub? BK-202's own AC set never reads/writes ATC/Test data — it is a pure container (name/description/goal). "Test Plan" has zero footprint across the current data/API/feature maps.
-2. Is Delete ever planned for a Test Plan, or is Close (sibling story BK-207) the only way a plan leaves the "Open" state, making Delete permanently out of scope for the whole epic?
-3. Is the "member role or higher" gate on create/edit enforced server-side, independent of the UI hiding the affordance, and does it re-check the live role at submit time rather than trusting a client-cached role?
-4. Does renaming an existing plan re-trigger the same case-insensitive, trimmed uniqueness check as creation?
-
-### Technical (block implementation)
-
-1. What is the exact, verbatim error-message copy for the duplicate-name rejection (AC3) and the blank-name rejection (AC4)?
-2. Does "compared after trimming spaces" mean ASCII space (0x20) only, or all whitespace (tabs, newlines, non-breaking space U+00A0)?
-3. Is plan edit restricted to the plan's original creator, or can any project member with role ≥ member edit any plan?
-4. What is the intended max length for description and goal? (name has an explicit 1–100 char rule; description/goal have none stated)
-5. Is per-project name uniqueness backed by a DB-level unique constraint, or an app-level check only?
-6. Is there an intended maximum number of Test Plans per project, or is the list unbounded by design?
+> Run results / coverage are NOT synced — read those via xray-cli. This file mirrors the issue description.
 
 ---
+
+## Description
+
+## Acceptance Test Plan (ATP) — BK-202
+
+Story: TMS-Test Plan | Create a test plan grouping tests for a goal
+Env: staging | Modality: jira-xray | Format: Cucumber (Gherkin)
+
+Ratified business rules (short form): name 1-100 chars inclusive, whitespace-collapsed
+then trimmed on POSIX `\s` classes only (tab/newline/etc — NOT U+00A0); description max
+500 chars; goal max 100 chars; uniqueness scoped per project via DB-level unique index
+`(project_id, lower(name))`; no per-project plan count cap; edit allowed to any member
+role or higher (not creator-restricted); no Delete ever (Close is the sole exit from
+Open); server-side role gate re-checked live on every write via `bunkai*can*write_workspace`.
+
+| # | Test | Scenario(s) covered |
+| --- | --- | --- |
+| 1 | Should create a test plan with name, description, and goal | 1.1 |
+| 2 | Should create a minimal test plan with name only | 1.2 |
+| 3 | Should validate a test plan name at the 100-character boundary | 1.3, 1.4 |
+| 4 | Should accept a test plan name that trims to exactly 1 character | 1.5 |
+| 5 | Should reject a duplicate plan name differing only by case | 2.1 |
+| 6 | Should reject a duplicate name padded with leading/trailing spaces | 2.2 |
+| 7 | Should allow the same plan name to be reused in a different project | 2.3 |
+| 8 | Should apply the tab-vs-non-breaking-space distinction to duplicate detection | 2.4 |
+| 9 | Should reject a plan rename that collides with another existing plan's name | 2.5 |
+| 10 | Should reject one of two concurrent create requests for the same plan name | 2.6 |
+| 11 | Should reject a blank test plan name | 3.1, 3.2, 3.3 |
+| 12 | Should hide the create-plan option from a viewer-role user | 4.1 |
+| 13 | Should reject a direct API create-plan request from a viewer-role user | 4.2 |
+| 14 | Should allow a member-role user to edit an existing plan they did not create | 4.3 |
+| 15 | Should reject a viewer's inline-edit attempt on an existing plan | 4.4 |
+| 16 | Should re-verify role server-side even with a stale client-cached role | 4.5 |
+
+19 AC scenarios formalized into 16 Xray Tests. Two collapses, both justified:
+
+- Tests 3 and 11 each merge a Boundary/Negative pair or triple that shares one expected-behavior
+
+  partition (100/101-char boundary; the three blank-name variants) into a single Scenario Outline.
+
+- Test 8 is NOT a collapse — it formalizes Scenario 2.4 (originally one inferred outcome,
+
+  "NEEDS PO/DEV CONFIRMATION") into a Scenario Outline with two data rows, because the ratified
+  whitespace rule makes tab-padding and NBSP-padding produce DIFFERENT outcomes (tab is trimmed
+  away -> duplicate rejected; U+00A0 is not trimmed -> distinct name, created successfully).
+
+Real code anchors: `supabase/migrations/0073*test*plans.sql` (RPCs), `lib/test-plans/validation.ts`,
+`lib/test-plans/errors.ts`, `app/api/v1/projects/[id]/test-plans/route.ts` (GET/POST),
+`app/api/v1/test-plans/[id]/route.ts` (PATCH only), `app/(app)/projects/[projectSlug]/plans/page.tsx`.
+
+---
+
+## Related Issues
+
+- tests: [BK-202](https://jira.upexgalaxy.com/browse/BK-202) - TMS-Test Plan | Create a test plan grouping tests for a goal
+- designs: [BK-574](https://jira.upexgalaxy.com/browse/BK-574) - Should create a minimal test plan with name only
+- designs: [BK-575](https://jira.upexgalaxy.com/browse/BK-575) - Should validate a test plan name at the 100-character boundary
+- designs: [BK-576](https://jira.upexgalaxy.com/browse/BK-576) - Should accept a test plan name that trims to exactly 1 character
+- designs: [BK-577](https://jira.upexgalaxy.com/browse/BK-577) - Should reject a duplicate plan name differing only by case
+- designs: [BK-578](https://jira.upexgalaxy.com/browse/BK-578) - Should reject a duplicate name padded with leading/trailing spaces
+- designs: [BK-579](https://jira.upexgalaxy.com/browse/BK-579) - Should allow the same plan name to be reused in a different project
+- designs: [BK-580](https://jira.upexgalaxy.com/browse/BK-580) - Should apply the tab-vs-non-breaking-space distinction to duplicate detection
+- designs: [BK-581](https://jira.upexgalaxy.com/browse/BK-581) - Should reject a plan rename that collides with another existing plan's name
+- designs: [BK-582](https://jira.upexgalaxy.com/browse/BK-582) - Should reject one of two concurrent create requests for the same plan name
+- designs: [BK-583](https://jira.upexgalaxy.com/browse/BK-583) - Should reject a blank test plan name
+- designs: [BK-584](https://jira.upexgalaxy.com/browse/BK-584) - Should hide the create-plan option from a viewer-role user
+- designs: [BK-585](https://jira.upexgalaxy.com/browse/BK-585) - Should reject a direct API create-plan request from a viewer-role user
+- designs: [BK-586](https://jira.upexgalaxy.com/browse/BK-586) - Should allow a member-role user to edit an existing plan they did not create
+- designs: [BK-587](https://jira.upexgalaxy.com/browse/BK-587) - Should reject a viewer's inline-edit attempt on an existing plan
+- designs: [BK-588](https://jira.upexgalaxy.com/browse/BK-588) - Should re-verify role server-side even with a stale client-cached role
+- designs: [BK-589](https://jira.upexgalaxy.com/browse/BK-589) - Should create a test plan with name, description, and goal
+
+---
+
+## Metadata
+
+- **Created:** 8/20/2026
+- **Updated:** 8/20/2026
+- **Reporter:** Alfonso Hernandez
+- **Assignee:** Unassigned
+
+---
+
 _Synced from Jira by sync-jira-issues_
+
+---
+_Source: Xray Test Plan [BK-573](https://jira.upexgalaxy.com/browse/BK-573) description · ATP · synced by sync-jira-issues_

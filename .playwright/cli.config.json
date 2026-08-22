@@ -13,7 +13,7 @@
       }
     }
   },
-  "outputDir": ".playwright/output",
+  "outputDir": ".context/PBI/epics/EPIC-BK-201-test-plans-milestones/stories/STORY-BK-202-tms-test-plan-create-a-test-plan-grouping-tests-fo/evidence/",
   "outputMode": "file",
   "console": {
     "level": "warning"
