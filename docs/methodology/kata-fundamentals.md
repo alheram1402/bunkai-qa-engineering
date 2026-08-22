@@ -12,8 +12,7 @@
 >
 > For implementation-specific guides (mandatory for AI), load the `/test-automation` skill. Its `references/` directory includes:
 >
-> - **AI Entry Point**: `references/kata-ai-index.md`
-> - **Architecture**: `references/kata-architecture.md`
+> - **AI Entry Point / Architecture**: `references/kata-architecture.md`
 > - **Standards**: `references/automation-standards.md`
 >
 > All code examples use **TypeScript + Playwright + Bun**.
@@ -1113,7 +1112,7 @@ XRAY_PROJECT_KEY=DEMO
 # TESTRAIL_RUN_ID=  # Optional, creates new if empty
 
 # ===== JIRA DIRECT (DISABLED) =====
-# ATLASSIAN_URL=https://company.atlassian.net
+# (site host: .agents/project.yaml -> issue_tracker.atlassian_url, not .env)
 # ATLASSIAN_EMAIL=user@company.com
 # ATLASSIAN_API_TOKEN=your_api_token_here
 #

@@ -39,7 +39,7 @@ The prefix is **ALWAYS the User Story key** (`{US_ID}`) — never the Test Set I
 {US_ID}: TC#: should <expected outcome> [<connector> <condition>] [given <precondition>]
 ```
 
-> Test Set membership is expressed as an issue **link** ("is part of" the Test Set), NEVER baked into the TC title.
+> Under Modality jira-xray, Test Set membership is **Xray-internal state** (managed via `/xray-cli`, read via `bun xray test enrich`) — NEVER a Jira issue link and NEVER baked into the TC title. Jira-native carve-out: with a Test Set work type present, membership IS expressed as TC→ATS issue links (still never in the TC title).
 
 ### Components
 
@@ -88,7 +88,7 @@ All Plans and Runs follow one **unified grammar** — the QA planning ladder:
 {ACRONYM}: {scope-id}: {descriptor}
 ```
 
-- **ACRONYM** — `FTP` · `STP` · `ATP` (Plans) · `FTR` · `STR` · `ATR` (Runs) · `TS` (Test Set) · `PRC` (Precondition) · `ReTest` (bug re-test Run). A reader / JQL sees altitude + plan-vs-run in the first token, and Plan pairs with Run visually.
+- **ACRONYM** — `FTP` · `STP` · `ATP` (Plans) · `STR` · `ATR` (Runs — FTR retired: feature results roll up via ATRs + the sprint STR) · `ATS` (Acceptance Test Set, per-Story — mandatory) · `TS` (feature-level Test Set — optional grouping) · `ReTest` (bug re-test Run). A reader / JQL sees altitude + plan-vs-run in the first token, and Plan pairs with Run visually.
 - **scope-id** — the key of the thing under test at that altitude: feature-Epic key, `Sprint#{N}`, or Story key.
 - **descriptor** — human-readable; embeds the testing term where required (`Story Testing`, `Feature Testing`, `Regression Testing`).
 
@@ -98,20 +98,21 @@ All Plans and Runs follow one **unified grammar** — the QA planning ladder:
 | ATP — Story Test Plan | Test Plan | `ATP: {STORY-KEY}: {story title}` | `ATP: PROJ-123: Apply discount at checkout` |
 | ATR — Story Test Execution | Test Execution | `ATR: {STORY-KEY}: Story Testing` | `ATR: PROJ-123: Story Testing` |
 | FTP — Feature Test Plan | Test Plan | `FTP: {EPIC-KEY}: {feature}` | `FTP: PROJ-42: Checkout & Payments` |
-| FTR — Feature Test Results | Test Execution | `FTR: {EPIC-KEY}: Feature Testing — {feature}{ · run N}` | `FTR: PROJ-42: Feature Testing — Checkout · run 2` |
 | STP — Sprint Test Plan | Test Plan | `STP: Sprint#{N}: Regression` | `STP: Sprint#30: Regression` |
 | STR — Sprint Test Results | Test Execution | `STR: Sprint#{N}: Regression Testing` | `STR: Sprint#30: Regression Testing` |
-| Test Set (TS) | Test Set | `TS: {EPIC-KEY\|module}: Validate {feature}` | `TS: GX-101: Validate credit card payment` |
+| ATS — Acceptance Test Set (per-Story, **mandatory**) | Test Set | `ATS: {US_ID}: {story title}` | `ATS: GX-101: Pay with credit card` |
+| Test Set (TS — feature-level, **optional**) | Test Set | `TS: {EPIC-KEY\|module}: Validate {feature}` | `TS: GX-42: Validate credit card payment` |
 | ReTesting (RTX) | Test Execution | `ReTest: {BUG-KEY}: {summary}` | `ReTest: GX-202: Does not show error when entering incorrect password` |
-| Precondition (PRC) | Precondition | `PRC: {COMPONENT}: {required state}` | `PRC: Payment: Authenticated user with a saved card` |
+| Precondition | Precondition | `{COMPONENT}: {required state}` (no ladder acronym) | `Payment: Authenticated user with a saved card` |
 
 Notes:
 
 - **Items over fields (by excellence).** Every Plan is a **Test Plan** issue and every Run is a **Test Execution** issue — in BOTH modalities (these are native Jira work types, Xray-independent). The Story custom field for ATP/ATR is a **degraded fallback ONLY**, used when those work types are unavailable in the instance. See `tms-architecture.md` §Container per modality.
-- **QA-process Epic homes** (3-axis model): every **Test Plan** (FTP/STP/ATP) parents to **QA Master Test Plan**; every **Test Execution** (FTR/STR/ATR), **Test Set**, and **Precondition** parents to **QA Test Artifacts**; every **Test** (TC) parents to **QA Test Repository**. The parent says only which QA bucket; scope (Story / feature / Sprint) travels on an issue link, product area on `components`.
+- **QA-process Epic homes** (3-axis model): every **Test Plan** (FTP/STP/ATP) parents to **QA Master Test Plan**; every **Test Execution** (STR/ATR), **Test Set** (ATS and TS), and **Precondition** parents to **QA Test Artifacts**; every **Test** (TC) parents to **QA Test Repository**. The parent says only which QA bucket; scope (Story / feature / Sprint) travels on an issue link, product area on `components` — mandatory on Tests, Test Plans, Test Executions AND the per-Story **ATS** (all inherit the source Story's components); **OPTIONAL on the feature-level `TS:` only** (a feature Set can span modules; its member Tests carry them).
 - **`ReTest:`** is already prefix-style and stays as-is. It is a Test Execution under **QA Test Artifacts**.
-- **Precondition**: the **title states the required state**, the **content holds the setup steps** — the two are kept distinct (`PRC: Payment: Authenticated user with a saved card` titles the state; the steps to reach it live in the issue body).
-- `Validate` stays the Test Set grouping word (consistent with the code `describe()` law); the `TS:` prefix adds the work-type / altitude signal on top.
+- **Precondition**: the **title states the required state**, the **content holds the setup steps** — the two are kept distinct (`Payment: Authenticated user with a saved card` titles the state; the steps to reach it live in the issue body).
+- **ATS is mandatory per Story** (even with a single TC) and holds ALL the Story's TCs; the ATP's and the Execution's test lists derive from its membership (Set-first). Its ATS→Story `is tested by` link is what fills the Xray coverage panel — ATP/ATR links do not (live-verified). The feature-level `TS:` survives as an **optional** grouping (smoke / regression / feature suite).
+- `Validate` stays the feature-level Test Set grouping word (consistent with the code `describe()` law); the `TS:` prefix adds the work-type / altitude signal on top. The per-Story `ATS:` mirrors the Story title instead.
 
 ---
 
@@ -127,12 +128,13 @@ Every TC in the TMS must have these fields populated. Exact field names vary by 
 | Summary / Title | Text | TC name following naming convention | `GX-101: TC1: should ...` |
 | Description / Steps | Long text | Gherkin or traditional step table | See §6 |
 | Test Status | Select | Execution state | `NOT RUN` / `PASSED` / `FAILED` |
-| Workflow Status | Select | Lifecycle state | `Draft`, `Ready`, `Candidate`, `Automated`, ... |
+| Workflow Status | Select | Lifecycle state | `Draft`, `In Design`, `READY`, `In Review`, `Candidate`, `In Automation`, `Pull Request`, `AUTOMATED`, `MANUAL`, `DEPRECATED` (§5) |
 | Priority | Select | Business risk priority | `Critical` / `High` / `Medium` / `Low` |
 | Labels | Multi-select | Classification tags | `regression`, `smoke`, `e2e` |
+| Components | Multi-select | Affected product module — mandatory (defect-management doctrine Part 3) | `Payments` |
 | Automation Candidate | Boolean | Automation flag | true / false |
-| Parent | Link | Regression Epic | Epic: `Test Repository` |
-| Linked Story | Link | Traceability to requirement | `PROJ-100` |
+| Parent | Link | Regression Epic | Epic: `QA Test Repository` |
+| Linked Story | Link | Traceability to requirement — **cascade**: primary through the Story's ATS (membership + ATS→Story `is tested by`, the coverage-panel link); jira-xray adds ATP (`is designed by`) / ATR (`is executed by`) administrative edges; jira-native without a Test Set work type links the TC to the Story directly (`is tested by` — the cascade's last resort) | `PROJ-100` (direct, last resort) |
 
 ### Conditional
 
@@ -150,7 +152,7 @@ These are **two independent fields** with two independent lifecycles. Mixing the
 |-----------|----------------------------|-----------------------------|
 | Lives on | The Test issue itself | A single Test Run inside a Test Execution (Xray) or a Test Status custom field on the Test issue (Jira-native) |
 | Answers | "Where is this TC in its documentation / automation lifecycle?" | "Did the TC pass the last time we ran it?" |
-| Values | `Draft` / `In Design` / `Ready` / `Manual` / `In Review` / `Candidate` / `In Automation` / `Pull Request` / `Automated` / `Deprecated` | `TODO` / `EXECUTING` / `PASS` / `FAIL` / `ABORTED` / `BLOCKED` |
+| Values | `Draft` / `In Design` / `READY` / `MANUAL` / `In Review` / `Candidate` / `In Automation` / `Pull Request` / `AUTOMATED` / `DEPRECATED` | `TODO` / `EXECUTING` / `PASS` / `FAIL` / `ABORTED` / `BLOCKED` |
 | Changed by | QA analyst, QA engineer (manual transitions) | Execution — either a human runner or `[TMS_TOOL] Import Results` in CI |
 | Persists across runs | Yes (workflow is the long-lived state) | No (each Test Run carries its own status; history lives in the Test Execution) |
 | Used by | Planning, ROI prioritization, automation intake | Regression reporting, GO / NO-GO, CI health |
@@ -168,7 +170,7 @@ These are **two independent fields** with two independent lifecycles. Mixing the
 
 **What this means for reporting**:
 
-- "TC is `Automated`" (workflow) is compatible with "last Test Run was `FAIL`" (run). The TC is live in CI, but it failed today.
+- "TC is `AUTOMATED`" (workflow) is compatible with "last Test Run was `FAIL`" (run). The TC is live in CI, but it failed today.
 - ATR's "PASSED / FAILED / PASSED WITH ISSUES" rollup comes from the **Execution Status** across all TCs in the ATR, not from the Test Status.
 - A TC in `Draft` (workflow) never has an Execution Status — it has not been executed yet.
 - When the legacy / current skill says "Test Status: NOT RUN / PASSED / FAILED", that refers to the **Execution Status** field in Jira-native mode (where there is no separate Test Run entity); in Xray mode, the equivalent lives on the Test Run and `NOT RUN` maps to `TODO`.
@@ -177,7 +179,7 @@ These are **two independent fields** with two independent lifecycles. Mixing the
 
 ## 5. Workflow state machine
 
-> **Substrate reference**: status and transition names below match the canonical UPEX Jira workflow declared in `.agents/jira-workflows.json` (see `.agents/jira-required.yaml` `work_types.test_case` for the methodology's required slugs). Skills resolve these via `{{jira.status.test_case.<slug>}}` and `{{jira.transition.test_case.<slug>}}`. If your project's Jira renames any state or transition, run `bun run jira:sync-workflows` to refresh the substrate so slug -> literal-name mapping stays correct.
+> **Substrate reference — AUTHORITATIVE**: `.agents/jira-workflows.json` (`work_types.test_case`) is the source of truth for every status and transition name below; a status absent from that file does not exist in the instance (`Approved`, `Automating`, `Merge Request` are common inventions and none of them exist). Names below are copied from the canonical UPEX Jira workflow declared in `.agents/jira-workflows.json` (see `.agents/jira-required.yaml` `work_types.test_case` for the methodology's required slugs). Skills resolve these via `{{jira.status.test_case.<slug>}}` and `{{jira.transition.test_case.<slug>}}`. If your project's Jira renames any state or transition, run `bun run jira:sync-workflows` to refresh the substrate so slug -> literal-name mapping stays correct.
 
 ### The full lifecycle
 
@@ -188,7 +190,7 @@ These are **two independent fields** with two independent lifecycles. Mixing the
                                                           ^
                                                           | Any state
                                                           |
-  Draft -> In Design -> Ready -+-- for manual --> Manual -+
+  Draft -> In Design -> READY -+-- for manual --> MANUAL -+
                          ^     |                          |
               back       |     +-- automation review --> In Review
                          |                                   |
@@ -198,7 +200,7 @@ These are **two independent fields** with two independent lifecycles. Mixing the
                          |                                                                                                |
                          |                                                                                                +-- create PR --> Pull Request
                          |                                                                                                                      |
-                         |                                                                                                                      +-- merged --> Automated
+                         |                                                                                                                      +-- merged --> AUTOMATED
                          |                                                                                                                                        |
                          +---------------------------------------------------------------------------------------------------------- back (rework) ---------------+
 ```
@@ -209,34 +211,36 @@ These are **two independent fields** with two independent lifecycles. Mixing the
 |-------|-------------|-------|------|
 | **Draft** | Newly created, placeholder | TC artifact created | Steps / Gherkin writing begins |
 | **In Design** | Steps being written | Draft + linked story | Steps reviewable |
-| **Ready** | Documented and complete | Steps reviewed | Manual or automation decision |
-| **Manual** | Manual regression only | Not an automation candidate | Can be reconsidered later |
+| **READY** | Documented and complete | Steps reviewed | Manual or automation decision |
+| **MANUAL** | Manual regression only | Not an automation candidate | Can be reconsidered later |
 | **In Review** | Automation ROI under evaluation | Marked as candidate | Approved or rejected |
 | **Candidate** | Approved for automation | Positive ROI | Automation begins |
 | **In Automation** | ATC being implemented | Developer starts coding | PR created |
 | **Pull Request** | Code submitted, awaiting merge | PR opened | PR merged |
-| **Automated** | Running in CI/CD | PR merged | Final (unless deprecated) |
-| **Deprecated** | Obsolete | Feature removed | Can be recovered |
+| **AUTOMATED** | Running in CI/CD | PR merged | Final (unless deprecated) |
+| **DEPRECATED** | Obsolete | Feature removed | Can be recovered (`recover` -> Draft) |
 
 ### Rules
 
-1. **No skipping** — Draft cannot jump to Automated.
-2. **Backward transitions are limited** — only "back to In Design" and "any state to Deprecated".
-3. **Manual is not a dead end** — Manual can later move to In Review if ROI changes.
-4. **Automated is the goal** — move as many as reasonable into Automated.
+1. **No skipping** — Draft cannot jump to AUTOMATED.
+2. **Backward transitions are limited** — the `back_*` family (one step back per state) plus "any state to DEPRECATED".
+3. **MANUAL is not a dead end** — MANUAL can later move to In Review, Candidate, or AUTOMATED if ROI changes.
+4. **AUTOMATED is the goal** — move as many as reasonable into AUTOMATED.
 
 ### Transition names (used in `[ISSUE_TRACKER_TOOL] Transition Issue`)
 
 | Transition | From -> To | Trigger |
 |-----------|-----------|---------|
 | `start design` | Draft -> In Design | Documentation begins |
-| `ready to run` | In Design -> Ready | Documentation complete |
-| `for manual` | Ready -> Manual | Not a candidate |
-| `automation review` | Ready -> In Review | Evaluate ROI |
+| `ready to run` | In Design -> READY | Documentation complete |
+| `for manual` | READY -> MANUAL | Not a candidate |
+| `automation review` | READY -> In Review | Evaluate ROI |
 | `approve to automate` | In Review -> Candidate | Positive ROI |
 | `start automation` | Candidate -> In Automation | Stage 5 begins |
 | `create PR` | In Automation -> Pull Request | PR created (often auto) |
-| `merged` | Pull Request -> Automated | PR merged (often auto) |
+| `merged` | Pull Request -> AUTOMATED | PR merged (often auto) |
+| `Deprecated` | Any -> DEPRECATED | TC retired |
+| `recover` | DEPRECATED -> Draft | TC revived |
 
 ---
 
@@ -573,9 +577,10 @@ When 3+ independent factors each have multiple values (browser × locale × plan
 
 | Link | Type | When |
 |------|------|------|
-| User Story | "tests" / "is tested by" | Always |
-| ATP (Test Plan) | Parent / reference | Always, after ATP exists |
-| ATR (Test Results) | Reference | Always, after ATR exists |
+| ATS (Acceptance Test Set) | Membership — Xray-internal (jira-xray) or TC→ATS issue link (jira-native with the Test Set work type) | Always — the ATS holds ALL the Story's TCs; its ATS→Story `is tested by` link is what fills the coverage panel |
+| User Story | "tests" / "is tested by" | **Last resort only** (cascade step 3): jira-native WITHOUT a Test Set work type — no ATS possible, so the direct TC→Story link carries traceability. Never needed while an ATS covers the TC |
+| ATP (Test Plan) | Parent / reference | Always, after ATP exists (administrative — contributes no coverage) |
+| ATR (Test Results) | Reference | Always, after ATR exists (administrative — contributes no coverage) |
 | Regression Epic | Parent | Always |
 | Acceptance Criterion | Reference | Always |
 | Bug (if blocked) | "is blocked by" | When a bug prevents execution |
@@ -589,7 +594,10 @@ All TCs must belong to a Regression Epic — the permanent repository for the pr
 ```
 [ISSUE_TRACKER_TOOL] Search Issues:
   project: {{PROJECT_KEY}}
-  query: type = Epic AND (summary ~ "regression" OR summary ~ "test repository" OR labels = "test-repository")
+  query: type = Epic AND summary ~ "{qa.qa_epics.test_repository_epic.name}"
+  # Resolve by the configured name (qa.qa_epics.test_repository_epic.name — "QA Test Repository"),
+  # then fall back to the cached epic key. Identity is NOT a label lookup — the
+  # QA-Artifact label marks QA-process epics but the configured name is the resolver.
 ```
 
 If none exists, ask the user before creating:
@@ -600,7 +608,7 @@ If none exists, ask the user before creating:
   issueType: Epic
   title: "QA Test Repository"   # configured name qa.qa_epics.test_repository_epic.name
   description: "Container epic for all {{PROJECT_KEY}} regression tests."
-  labels: test-repository, regression, qa
+  labels: QA-Artifact, regression, qa   # QA-Artifact is mandatory on QA-process epics; `test-repository` is retired as an identity label
 ```
 
 Typical structure:
@@ -665,7 +673,7 @@ Automated results flow from CI to the TMS:
 ### Do
 
 - Create TCs **after** the feature is stable and validated.
-- Link every TC to its source story, ATP, ATR, and AC.
+- Add every TC to its Story's ATS (the coverage backbone) and link it to the ATP, ATR, and AC — a direct Story link only as the cascade's last resort (no ATS).
 - Use Gherkin for automatable TCs; Traditional for manual.
 - Evaluate ROI before marking candidates.
 - Keep the Regression Epic as the single source of truth.
@@ -679,7 +687,7 @@ Automated results flow from CI to the TMS:
 - Create TCs before exploring the feature.
 - Create TCs without a parent (Regression Epic).
 - Create TCs without traceability to a requirement.
-- Skip workflow states (e.g., Draft directly to Automated).
+- Skip workflow states (e.g., Draft directly to AUTOMATED).
 - Automate without evaluating ROI first.
 - Duplicate TCs for the same scenario (same precondition + action = same TC).
 - Leave status stale after automating (update the TMS when the PR merges).
@@ -696,7 +704,7 @@ Automated results flow from CI to the TMS:
 | TC issue type | Xray Test |
 | Test Status field | Xray Test Status or Jira custom field |
 | Workflow Status | Jira custom workflow or Xray Test Status |
-| Regression Epic | Jira Epic with label `test-repository` |
+| Regression Epic | Jira Epic resolved by configured name (`qa.qa_epics.test_repository_epic.name` — "QA Test Repository"), then cached key; carries the `QA-Artifact` label |
 | Test Execution | Xray Test Execution |
 | Results import | Xray REST API (JUnit / Cucumber) |
 | CLI | `bun xray` (load `/xray-cli` skill) |

@@ -45,7 +45,7 @@ ONBOARDING (one-time)  →  STAGE 0           →  SESSION START  →  STAGE 1  
 | Stage | Owning skill | Output |
 | ----- | ------------ | ------ |
 | **Onboarding** (one-time) | `project-discovery` (discovery) + `/adapt-framework` (KATA adaptation) | `CLAUDE.md`, `.context/` artifacts, and KATA wired to the target stack |
-| **0 — Shift-Left QA** (pre-sprint, batch) | `shift-left-testing` | Refined ACs + gap-spotting + ATP DRAFT outlines per Story, label `shift-left-reviewed`, Story transitioned `backlog → shift_left_qa → estimation` for PO/Dev to estimate |
+| **0 — Shift-Left QA** (pre-sprint, batch) | `shift-left-testing` | Refined ACs + gap-spotting + pre-sprint ATP (outline maturity, authored into the `{{jira.acceptance_test_plan}}` field — the Test Plan item is created later by `sprint-testing` Stage 1) per Story, label `shift-left-reviewed`, Story transitioned `backlog → shift_left_qa → estimation` for PO/Dev to estimate |
 | **1 — Planning** (in-sprint) | `sprint-testing` | ATP + TCs linked to ACs (short-circuits Phases 1-3 when the Story carries a fresh `shift-left-reviewed` label) |
 | **2 — Execution** | `sprint-testing` | Smoke + trifuerza (UI/API/DB) exploration, evidence captured |
 | **3 — Reporting** | `sprint-testing` | ATR, bug tickets, QA comment on the source ticket |
@@ -135,8 +135,12 @@ The rest of this document describes how that strategy is implemented in code and
 | **Command**           | A one-shot utility stored under `.claude/commands/<name>.md`. Invoked explicitly with `/<name>`. No auto-triggering.          |
 | **Subagent**          | A specialist worker dispatched by a skill for a focused task (planning, execution, reporting, verification).                 |
 | **Persistent Memory** | Facts that survive across conversations — user preferences, project rules, team decisions.                                   |
-| **ATP**               | Acceptance Test Plan. The risk triage and scenario design produced in Stage 1 (Planning).                                    |
+| **ATP**               | Acceptance Test Plan. The risk triage and scenario design; authored pre-sprint into the `{{jira.acceptance_test_plan}}` field (Stage 0), materialized as a Test Plan item in Stage 1 (Planning). |
 | **ATR**               | Acceptance Test Results. The report filed in Stage 3 (Reporting).                                                            |
+| **ATS**               | Acceptance Test Set. The mandatory per-Story Test Set (`ATS: {STORY-KEY}: {story title}`) whose link to the Story provides coverage; ATP/ATR test lists derive from its membership. |
+| **FTP**               | Feature Test Plan. One per feature Epic, maintained by `sprint-testing`'s feature-test-planning as living context.           |
+| **STP**               | Sprint Test Plan. One per sprint, opened at sprint start by `sprint-testing` (fallback: `regression-testing`), closed at sprint end. |
+| **STR**               | Sprint Test Results. One per sprint, the sprint-close recap execution (`STR: Sprint#{N}: Regression Testing`).               |
 | **TC**                | Test Case. A single, traceable verification linked to an acceptance criterion.                                               |
 | **ATC**               | Acceptance Test Case. A TC implemented as code, carrying an `@atc('{{PROJECT_KEY}}-XXX-TC#')` decorator.                     |
 | **PBI**               | Product Backlog Item. In this repo, the local folder (`.context/PBI/...`) that stores per-ticket and per-module knowledge.   |
@@ -260,15 +264,17 @@ The knowledge layer is organised in three tiers, mirroring the scope at which th
 ├── ADR/                          # Project level — test-architecture decisions (append-only, never regenerated)
 │   ├── README.md                #   When-to-write (two-gate) + status lifecycle + index
 │   └── ADR-NNNN-template.md     #   Copy → ADR-NNNN-<slug>.md per decision
-└── PBI/                          # Epic + Story level (Module = Epic, 1:1)
+└── PBI/                          # Epic + Story level (Module = Epic, 1:1) — GITIGNORED cache
+    ├── README.md                 # Tier rules + gitignore ladder         [COMMIT]
+    ├── templates/                # Skeletons                             [COMMIT]
     ├── epic-tree.md              # Master index of every Epic            [SYNC]
     └── epics/
         └── EPIC-<KEY>-<slug>/
             ├── epic.md                          # Epic overview          [SYNC]
+            ├── module-context.md                # '## Module Context (QA)' section of the Epic description [SYNC]
             ├── feature-implementation-plan.md   # Feature-level dev plan [SYNC]
             ├── feature-test-plan.md             # Feature-level test plan[SYNC]
-            ├── module-context.md                # Module overview (non-Jira)
-            ├── test-specs/                      # EPIC-level (non-Jira)
+            ├── test-specs/                      # EPIC-level             [COMMIT]
             │   ├── ROADMAP.md   # All test IDs + automation status
             │   ├── PROGRESS.md  # Current progress
             │   └── <ID>/
@@ -282,13 +288,16 @@ The knowledge layer is organised in three tiers, mirroring the scope at which th
                     ├── acceptance-test-plan.md        # ATP cache        [SYNC]
                     ├── acceptance-test-results.md     # ATR cache        [SYNC]
                     ├── comments.md                    # Jira comments    [SYNC]
-                    ├── context.md                     # Session notes (non-Jira)
-                    └── evidence/*.png                 # Captured evidence (non-Jira)
+                    ├── test-cases/                    # Linked Test issues [SYNC]
+                    ├── context.md                     # Notes about the repo [LOCAL]
+                    └── evidence/*.png                 # Captured evidence  [LOCAL]
 ```
 
-`[SYNC]` files mirror a Jira field and are a read-only cache materialized by `scripts/sync-jira-issues.ts` — never hand-written. Jira is the source of truth.
+Three tiers. **`[SYNC]`** mirrors a Jira field, is materialized by `scripts/sync-jira-issues.ts`, and is never hand-written — Jira is the source of truth and `bun run context:hydrate` rebuilds the lot. **`[COMMIT]`** is versioned in git because it describes the test code, not the ticket. **`[LOCAL]`** is disposable session output; nothing downstream may depend on it existing, because it only exists on the machine that made it.
 
-The canonical shape is documented in `.context/README.md`. The strategic reasoning behind the three-tier split lives in `CONTEXT.md` (repo root) — read that for the full rationale.
+The PBI tree as a whole is gitignored precisely because it regenerates: two sessions re-syncing at different times would otherwise commit conflicting copies of the same generated text. Per-ticket session state (`test-session-memory.md`) lives in `.session/sprint-testing/<scope>/`, outside the cache, so a re-sync cannot clobber it mid-run.
+
+The canonical shape is documented in `.context/README.md`. The strategic reasoning behind the three-tier split lives in `.context/PBI/README.md` §"Three tiers, three lifecycles" — read that for the full rationale.
 
 ### Cross-skill references
 
@@ -436,7 +445,7 @@ The orchestration model is not improvised per session — it is captured in cano
 
 - **`CLAUDE.md` §Orchestration Mode** — canonical project-level statement of the strategy (subagent-or-not decision rule, briefing format, error protocol).
 - **`agentic-qa-core/references/orchestration-doctrine.md`** — cacheable mirror loaded by subagents that need the full doctrine without re-reading `CLAUDE.md`.
-- **`agentic-qa-core/references/briefing-template.md`** — the six-component briefing format every dispatch uses (Goal · Context docs · Skills to load · Exact instructions · Report format · Rules).
+- **`agentic-qa-core/references/briefing-template.md`** — the seven-component briefing format every dispatch uses (Goal · Context docs · Project Standards (auto-resolved) · Skills to load · Exact instructions · Report format · Rules).
 - **`agentic-qa-core/references/dispatch-patterns.md`** — decision guide for the four patterns (Single, Sequential, Parallel, Background) and when each applies.
 - **`## Subagent Dispatch Strategy`** sections inside each workflow `SKILL.md` (`shift-left-testing`, `sprint-testing`, `test-documentation`, `test-automation`, `regression-testing`, `framework-development`) — per-stage tables declaring which steps delegate to subagents and with what pattern.
 
@@ -523,7 +532,7 @@ Automated tests live in a four-layer architecture called **KATA** (Komponent Act
 ```
 ┌────────────────────────────────────────────────────────────────┐
 │  LAYER 4: TestFixture                             [injector]   │
-│  Dependency injection — { api } { ui } { test } { steps }      │
+│  Dependency injection — { api } { ui } { test }                │
 │  File: tests/components/TestFixture.ts                         │
 └────────────────────────────────────────────────────────────────┘
                               ▲

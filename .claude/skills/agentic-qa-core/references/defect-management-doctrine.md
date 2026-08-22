@@ -137,17 +137,55 @@ issue has its own QA owner; clobbering it destroys accountability and metrics.
 
 `components` is a **native Jira field** (not a custom field — it is set directly,
 not via `{{jira.*}}`). It is **mandatory** on every Bug / Defect / Improvement
-and is the primary grouping axis for defect metrics, JQL filters, and dashboards.
+**and on every `Test`**, and is the primary grouping axis for quality metrics,
+JQL filters, and dashboards.
 
-- **Convention (binding): one component = one software module = one product
-  Epic.** Components mirror the product's Epics / system areas. Set the component
-  to the product area the issue *affects*.
+- **Convention (binding): one component = one functional module of the
+  application.** Components mirror the app's real surface — routes, features,
+  bounded areas of the source (`/checkout/cart` → `Cart`, `/auth/login` →
+  `Login`) — not the planning taxonomy. Deliberately finer-grained than the
+  product Epics: an Epic is a unit of work, a component is a unit of the running
+  system, and a filter is only as useful as it is discriminating. Set the
+  component to the area the issue or test *touches*.
+- **A component may be declared ahead of the code.** "Mirrors the app's surface"
+  describes the *shape* of a component, not a precondition that the module already
+  ships. A feature under refinement has Stories, ACs and often Tests before it has
+  a route, and all of them need somewhere to hang — refusing to name the component
+  until the code lands leaves that work uncomponented exactly when planning
+  metrics would be useful. Declare it when the module becomes a known part of the
+  product, and treat the source as evidence of what exists rather than as the
+  gate.
+  The reconciler is built for this: it is re-run as the map evolves, `create` is
+  additive, and `rename` re-labels a component without touching a single issue
+  assignment. So a forward-declared component costs nothing if the feature ships
+  under a different name, and nothing if it never ships at all.
 - **Components must pre-exist.** Their options are defined in the project's
   *Components* admin module, not from the issue dropdown; Jira rejects unknown
-  names. Creating/curating component definitions is an out-of-band admin setup
-  (acli cannot create them) — keep the Components module in sync with the Epics.
+  names. `acli` cannot create or edit them (`acli/SKILL.md` §Hard limits), so
+  populating them is either an admin task or a REST operation — driven by
+  `scripts/sync-jira-components.ts` through the `/jira-components` command,
+  which is plan-based on purpose: the AI proposes the module map, a human
+  approves it, and only the approved plan is written. Renaming (which preserves
+  issue assignments) is a separate operation from creating.
+  The module map is proposed from **two** inputs, not one: the app's source
+  (what exists) and the backlog's own scope — Epics and Stories describing work
+  not yet built (what is coming). Deriving from source alone silently drops every
+  planned module, which shows up later as an issue nobody can classify.
+- **Prefix components with the product name when the product's domain
+  vocabulary overlaps QA's** (conditional recommendation, not a blanket rule).
+  A test-management product has features literally named Tests, Runs, Bugs — so
+  a component called `Tests` is ambiguous: the product's Tests feature, or the
+  QA artifacts about the product? Prefixing with the product name (`Bunkai
+  Tests`, `Bunkai Runs`) removes the ambiguity. The overlap is the normal case
+  for developer tools, testing products, and project-management products; it is
+  absent for, say, an e-commerce site, where `Checkout` collides with nothing
+  and the prefix is just noise. The AI raises this with the user when it
+  detects the overlap while proposing a component plan — it does not apply the
+  prefix silently.
 - **Multiple components are allowed** when an issue genuinely spans areas; prefer
-  the single most-affected module otherwise.
+  the single most-affected module otherwise. On a `Test`, they are metadata that
+  travels in the synced `.md` — placement on disk follows the covering Story, so
+  a Test spanning two modules costs nothing.
 - Components answer **"what part of the product broke"** — a different axis from
   `parent` (**"which QA bucket tracks it"**, Part 4). Do not conflate them.
 
@@ -172,7 +210,10 @@ components          ->  PRODUCT module/epic  ("what part of the product it affec
 - **parent** = the QA process epic (below). Never a product/dev epic.
 - **issue link** = the originating Story/feature via the causal/coverage link
   (`problem_incident` → *causes* / *is caused by*; `blocks` when it gates a
-  release; `test` for Test↔Story coverage). Traceability is preserved here, NOT
+  release; `test` for container→Story coverage — the per-Story **ATS**→Story
+  link is the coverage-bearing edge, live-verified; ATP→Story / ATR→Story are
+  administrative; direct TC→Story is the cascade's last resort — see
+  `traceability-linking.md` §3). Traceability is preserved here, NOT
   via the parent.
 - **components** = the affected product area (Part 3).
 
@@ -182,7 +223,7 @@ components          ->  PRODUCT module/epic  ("what part of the product it affec
 |---|---|---|
 | **Master Test Plan epic** | every **Test Plan** (FTP/STP/ATP) | `qa.qa_epics.master_test_plan_epic.name` — **"QA Master Test Plan"** |
 | **Test Repository epic** | every **Test** (TC) | `qa.qa_epics.test_repository_epic.name` — **"QA Test Repository"** |
-| **Test Artifacts epic** | every **Test Execution** (FTR/STR/ATR), **Precondition**, **Test Set** | `qa.qa_epics.test_artifacts_epic.name` — **"QA Test Artifacts"** |
+| **Test Artifacts epic** | every **Test Execution** (STR/ATR), **Precondition**, and **Test Set** — both the per-Story **ATS** (`ATS: {US_ID}: {story title}` — MANDATORY per Story, components INHERITED from the Story) and the optional feature-level **`TS:`** (`TS: {EPIC\|module}: Validate {feature}` — components optional, may cross modules) | `qa.qa_epics.test_artifacts_epic.name` — **"QA Test Artifacts"** |
 | **Defect epic** | every **bug/defect/improvement** | `qa.qa_epics.defect_epic.name` — **"QA Defect Management"** |
 
 - The **Master Test Plan epic has a special role**: it is an **Epic** (not a Test
@@ -190,11 +231,45 @@ components          ->  PRODUCT module/epic  ("what part of the product it affec
   `.context/master-test-plan.md` + points to the official QA team repository, and is
   cross-linked (`relates to`) to its three sibling QA epics (Test Repository, Test
   Artifacts, Defect Management) — so the four form a navigable QA-governance cluster.
+- **Test Sets split by altitude.** The per-Story **ATS** (Acceptance Test Set,
+  `ATS: {US_ID}: {story title}`) is a MANDATORY canonical artifact — one per
+  Story, even for a single Test — and inherits its **components from the Story**
+  (mandatory, like ATP/ATR). The components exemption applies ONLY to the
+  optional feature-level **`TS:`** set (`TS: {EPIC|module}: Validate {feature}`),
+  which may legitimately cross modules (smoke / regression / feature grouping).
+  Both altitudes parent to the **Test Artifacts epic**; the ATS additionally
+  carries the coverage-bearing `test` link to its Story
+  (`traceability-linking.md` §3).
 - The **`QA `/ project prefix is deliberate**: a reader scanning epics sees `QA …`
   and knows it is a *process* epic, not a product feature.
 - Epic identity (name + key) is configured per project in `.agents/project.yaml`
   under `qa.qa_epics:` — never hardcode it in skill content. Resolve by the
   configured name; the resolver finds-or-creates and caches the key.
+
+#### Every QA process epic carries the `{{QA_ARTIFACT_LABEL}}` label (binding)
+
+Apply it at creation time, on all four. It is what tells tooling that an Epic is a
+QA bucket rather than a product module: `scripts/sync-jira-issues.ts` reads it to
+keep these Epics out of `.context/PBI/epics/`, which is the product tree, and index
+them under `qa-artifacts/` instead. Without the label they land beside real product
+Epics as near-empty folders, because a Story query against a process epic returns
+nothing.
+
+The label is the primary signal precisely because the other two are weaker. The
+cached `qa.qa_epics.*.key` values are `null` until a skill discovers them, so they
+cover nothing on a fresh project. The `QA ` name prefix is a guess that misfires on
+a product Epic legitimately named "QA Tooling" — the sync falls back to it and
+reports when it does, so a run that mentions the fallback is asking for this label.
+
+```
+[ISSUE_TRACKER_TOOL] Create Issue:
+  type: Epic
+  summary: {{jira.qa_epics.<slug>.name}}
+  labels: [{{QA_ARTIFACT_LABEL}}]
+```
+
+Adding it to an Epic that already exists is a one-field edit and is worth doing the
+first time a sync reports the name-prefix fallback.
 
 ### Find-or-create (binding setup behavior)
 

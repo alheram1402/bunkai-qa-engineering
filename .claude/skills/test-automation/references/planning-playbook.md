@@ -14,7 +14,7 @@ Scope-selection rules (which scope to pick, the one-line summary of each) live i
 
 The Plan phase is delegated to a single subagent. The orchestrator does NOT read the KATA references, the existing component code, or the OpenAPI schemas during planning — that exploration lives entirely in the subagent's context.
 
-**Briefing** (6 components per `agentic-qa-core/references/briefing-template.md`):
+**Briefing** (7 components per `agentic-qa-core/references/briefing-template.md`):
 
 ```
 Goal: Produce spec.md + automation-plan.md for scope <SCOPE> (module|ticket|ATC) <SCOPE_KEY>.
@@ -28,11 +28,12 @@ Context docs:
   - .claude/skills/test-automation/references/atc-tracing.md
   - tests/components/<api|ui>/ (existing components — open ONLY when the manifest entry is ambiguous)
   - api/schemas/ (TypeScript types for API tests)
+Project Standards (auto-resolved): <compact rules pulled from .claude/skills/REGISTRY.md per agentic-qa-core/references/skill-resolver.md — authoritative for listed conventions; do not re-read full SKILL.md files>
 Skills to load: (none — planning skill is loaded by orchestrator already)
 Exact instructions:
   1. Load kata-manifest.json FIRST. Cross-check every candidate Component name against components.api[].name + components.ui[].name; cross-check every candidate ATC ID against components.{api,ui}[].atcs[].id. Treat any match as a reuse signal — never plan a duplicate.
   2. Read remaining context docs to understand scope, business risks, and any coverage the manifest does not surface.
-  3. Draft spec.md with: scope summary, ATCs (with ATC-identity rule applied), parameter sets (Equivalence Partitioning), data fixtures needed.
+  3. Draft spec.md with: scope summary, the TMS-ID table of TCs in scope, and the Automation Plan (order, shared fixtures, blockers). Do NOT restate TC bodies — they live in Jira and sync into test-cases/.
   4. Draft automation-plan.md with: target file paths, fixture selection (api / ui / test), reused-vs-new components (cite manifest entries), dependency order, estimated complexity per ATC.
   5. Write both files to .context/PBI/epics/EPIC-<KEY>-<slug>/test-specs/<scope-slug>/.
 Report format:
@@ -50,7 +51,9 @@ The orchestrator reads the JSON report, surfaces open_questions to the user if a
 
 ## 1. Plan document map
 
-Three document types, each tied to a scope. Every scope produces at least `spec.md`; ticket and regression scopes add `automation-plan.md`; complex ATCs add per-ATC specs under `atc/`. All live at the Epic level under `.context/PBI/epics/EPIC-<KEY>-<slug>/test-specs/`. These are NON-Jira hand-authored files (committed to git).
+Three document types, each tied to a scope. Every scope produces at least `spec.md`; ticket and regression scopes add `automation-plan.md`; complex ATCs add per-ATC specs under `atc/`. All live at the Epic level under `.context/PBI/epics/EPIC-<KEY>-<slug>/test-specs/`.
+
+`test-specs/` is the one `[COMMIT]` island inside an otherwise gitignored Jira cache (`CLAUDE.md` §9). These files describe the **test code**: they must land in the same commit as the code they produce, or a reviewer cannot contrast plan against implementation. That is also the line that decides what belongs here — a Jira `Test` issue holds the test case, an `atc/*.md` holds how to implement it in KATA. Same ID, two documents, two owners.
 
 | Document | Scope that produces it | Location |
 |----------|-----------------------|----------|
@@ -152,7 +155,11 @@ Local `{PREFIX}-T{NN}` naming is filesystem scaffolding. All TC headings inside 
 
 ## 4. `spec.md` structure
 
-The spec is the business-facing contract. A reader with zero context should understand **what** to test and **why**. Use the template below, omit sections that do not apply.
+The spec is the **automation batch plan**: which TCs this scope automates, in what order, and what they share. It does NOT restate the test cases.
+
+> **Why it stopped carrying the Gherkin.** The TC body — preconditions, action, expected output, Gherkin — lives in the Jira `Test` issue, and `bun run jira:sync-issues` now materializes every Test linked to a Story into `test-cases/TEST-<KEY>-<slug>.md` under that Story. Copying it here too put the same text on disk twice, and the copy nobody re-synced was the one people read. Reference the TMS ID; the body is one sync away.
+
+> **Reference TCs by Jira key, never by path.** Folder slugs are derived from issue summaries, so a Story retitled in Jira renames its folder and breaks every hardcoded link — relative or aliased. The key is the only stable identifier.
 
 ```markdown
 # {PREFIX}-T{NN}: {Title}
@@ -167,31 +174,29 @@ The spec is the business-facing contract. A reader with zero context should unde
 | **Source** | Story: {TICKET-ID} / Bug: {brief} / Gap: {brief} |
 
 ## Summary
-{What this spec covers and why it matters. 2–4 sentences.}
-
-## Preconditions
-- {Entities, states, conditions required before running these tests}
+{What this scope automates and why it matters. 2–4 sentences.}
 
 ## Test Cases
 
-### {TMS_TC_ID}: should {behavior} when {condition}
+> Bodies live in Jira. Synced copies sit under the covering Story's `test-cases/`
+> (or `epics/_orphans/tests/` when the Test covers nothing); run
+> `bun run jira:sync-issues get {TICKET-ID}` if they are not on disk.
 
-**Preconditions**: {System state}
-**Action**: {User action — the trigger}
-**Expected Output**:
-- {Assertion 1}
-- {Assertion 2}
-- {What should NOT be visible}
+| TMS ID | Title | Type | Priority |
+|--------|-------|------|----------|
+| {TMS_TC_ID} | should {behavior} when {condition} | Positive / Negative / Boundary | P0 |
 
-\`\`\`gherkin
-Scenario: {TMS_TC_ID} - should {behavior} when {condition}
-  Given {state}
-  When the user {active action}
-  Then {outcome}
-  And {additional assertion}
-\`\`\`
+## Automation Plan
 
----
+**Order**: {execution order and why — e.g. "PROJ-501 first: it seeds the coupon
+the rest reuse"}
+
+**Shared fixtures**: {fixtures these TCs have in common, and which ATC creates each}
+
+**Blocked by**: {missing mock, unavailable env, unbuilt helper — or "Nothing"}
+
+**Preconditions for the whole scope**: {entities, states, accounts required before
+any of these run — distinct from a single TC's own preconditions, which live in Jira}
 
 ## Merged TCs (if any)
 | Removed ID | Merged Into | Reason |
@@ -206,11 +211,11 @@ Scenario: {TMS_TC_ID} - should {behavior} when {condition}
 
 Rules for `spec.md`:
 
-- TC heading format — `### {TMS_TC_ID}: should {behavior} when {condition}`.
-- Gherkin `When` describes a **user action**, not a passive system event.
-- No hardcoded values in Gherkin — use variables `{user_id}`, `{order_id}`, `{month}`.
+- Every row in the Test Cases table carries a **TMS-generated ID**. A local-only ID means the TC was never created in the TMS — go create it first (§3).
+- Do NOT paste the Gherkin, the steps, or the expected output. If you find yourself explaining what a TC verifies, that belongs in the Jira issue.
 - Multi-step flows (2+ actions with intermediate verifications) are flagged as multi-ATC tests, not a single TC.
 - Priority levels: P0 (release-blocker), P1 (high value), P2 (edge cases).
+- The Automation Plan section is the part only this file can hold: order, shared fixtures and blockers are properties of the batch, not of any one test case.
 
 ---
 
@@ -257,7 +262,7 @@ The automation plan is the technical contract — what code to write, which comp
 ### Component Strategy
 | Decision | Value | Rationale |
 | Component | {Resource}Api.ts / {Page}Page.ts | New or existing? |
-| Fixture | { api } / { ui } / { test } / { steps } | Why this fixture? |
+| Fixture | { api } / { ui } / { test } | Why this fixture? |
 | Test file | tests/{type}/{module}/{verbFeature}.test.ts | Naming rationale |
 | Preconditions | Steps module / inline | What setup is needed? |
 
@@ -307,7 +312,7 @@ Teardown: ...
 - [ ] Register component in fixture
 - [ ] Create test file
 - [ ] Run tests and validate
-- [ ] Update TMS status to "Automated"
+- [ ] TMS TC transitions to Pull Request when the PR opens (`create_pr` transition) — Automated only lands post-merge via the `merged` transition
 
 ## 7. Success Criteria
 - [ ] All ACs covered — **the floor, not the bar.** Also: risk-beyond-AC covered (invalid/boundary inputs, auth/error paths, state transitions, anomalies the AC is silent on) per `agentic-qa-core/references/test-design-doctrine.md`
@@ -317,7 +322,7 @@ Teardown: ...
 - [ ] No hardcoded waits
 - [ ] Aliases used
 - [ ] Tests pass locally
-- [ ] TMS marked Automated
+- [ ] TMS TC moved to Pull Request on PR open (never "Automated" after local validation — Automated is exclusively the post-merge `merged` transition, once CI is green on main)
 ```
 
 Implementation-order rule of thumb: each box in Section 6 should map to a single commit. If a commit would mix "new types" and "new ATC", split it.
@@ -459,7 +464,7 @@ Planning tasks the manifest answers:
 | "Does an `OrdersApi` component already exist?" | Look under `components.api[].name` |
 | "Is ATC `UPEX-101` already decorated somewhere?" | Grep `atcs[].id` in every component |
 | "Which component owns endpoint X?" | Component names map to domain; confirm by opening the file only if unclear |
-| "Which Steps classes already compose ATCs?" | Check `preconditions[]` and its method list |
+| "Which Steps classes already compose ATCs?" | Check the manifest's steps listing (`tests/components/steps/` scan) and its method list |
 
 Include two tables in the implementation plan based on manifest output:
 
@@ -480,7 +485,7 @@ Gate checklist:
 - [ ] For ticket/regression scope: `automation-plan.md` exists with §3 ATC Registry populated.
 - [ ] For complex ATCs: `atc/*.md` exists with the contract (signature + fixed assertions) defined.
 - [ ] Data strategy is documented per precondition (pattern + source + placement + cleanup).
-- [ ] Fixture decision is recorded (`{ api }` / `{ ui }` / `{ test }` / `{ steps }`).
+- [ ] Fixture decision is recorded (`{ api }` / `{ ui }` / `{ test }`).
 - [ ] Every "New ATC" in the registry has a unique `@atc` ID that does not collide with `bun run kata:manifest` output.
 - [ ] Module master doc exists (module scope only) with §4 Data Flow and §7 Data Strategy populated.
 - [ ] Implementation order is defined with one commit per step.
@@ -534,7 +539,7 @@ When every box is checked, the plan is ready to hand off to Phase 2 (Code). Unti
 
 ## 12. Interrupted-session recovery
 
-When `/test-automation` is invoked mid-flow (or resumed after context loss), determine the resume step from the PBI state. The skill reads `PROGRESS.md` + `ROADMAP.md` directly — no `@`-loadable session file needed.
+When `/test-automation` is invoked mid-flow (or resumed after context loss), the FIRST stop is the mandatory Phase 0 session contract: read `.session/test-automation/<scope>/{plan.md, progress.md}` per `agentic-qa-core/references/session-management.md` and offer resume / restart / abort. `PROGRESS.md` + `ROADMAP.md` (in `test-specs/`) are the module-batch trackers — read them to confirm which ticket the resume applies to, but they complement the `.session/` contract, they do not replace it.
 
 | Has plan? (`automation-plan.md`) | Has test code? (`tests/e2e/**` or `tests/integration/**`) | Resume from |
 |---|---|---|
@@ -626,15 +631,15 @@ T01 ──┬──► T02 ──► T04
 
 | Ticket | Status | Test file | Done | Notes |
 |---|---|---|---|---|
-| T01 | done | tests/e2e/login.spec.ts | 3/3 | — |
-| T02 | in-progress | tests/e2e/signup.spec.ts | 1/5 | Fixture blocked on email-verify mock |
+| T01 | done | tests/e2e/login.test.ts | 3/3 | — |
+| T02 | in-progress | tests/e2e/signup.test.ts | 1/5 | Fixture blocked on email-verify mock |
 
 ## Session log
 
 | Date | Action | Actor | Artifacts |
 |---|---|---|---|
 | 2026-04-19 | Planned T02 | AI | automation-plan.md |
-| 2026-04-20 | Coded T02 ATC1 | AI | tests/e2e/signup.spec.ts |
+| 2026-04-20 | Coded T02 ATC1 | AI | tests/e2e/signup.test.ts |
 
 ## Shared components created
 

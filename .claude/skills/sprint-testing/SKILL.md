@@ -4,6 +4,32 @@ description: "Orchestrates in-sprint manual QA per ticket across Stages 1 (Plann
 license: MIT
 compatibility: [claude-code, copilot, cursor, codex, opencode]
 complementary_categories: [testing-e2e, testing-api, issue-tracker]
+# compact_rules is consumed VERBATIM by scripts/build-skill-registry.ts (frontmatter-first,
+# no truncation). Keep in sync with the binding doctrine below and in references/.
+compact_rules: |
+  - AC-pass is the FLOOR, not the goal. Coverage = AC-conformance + risk-beyond-AC (boundaries, errors, states, anomalies). Never report "% of ACs verified" as completeness. (Canon: `agentic-qa-core/references/test-design-doctrine.md`.)
+  - 1:N is the default: explode every non-trivial AC into multiple cases (EP partitions + boundaries + states + contexts). Collapsing an AC to one case requires a written "trivially atomic" justification.
+  - Apply techniques by trigger: EP always; BVA wherever a range / limit / length / date-window exists; State-Transition for stateful entities; Decision Table when 2+ conditions interact; Pairwise when 3+ combinable factors (log the reduction); Error-Guessing charters for experience-based risk.
+  - A criterion is a business assertion; a test case is a concrete exploration of it. Run the Test-Design Checklist before finalizing the ATP.
+  - CLASSIFY before filing — stop hardcoding "Bug". **Bug** = affected feature already live above Staging (end-user visible); **Defect** = feature still pre-release (Staging or below), the normal output of sprint testing; **Improvement** = not a broken AC (an enhancement, or an under-specified/absent AC surfaced by a test-beyond-AC). Classification follows the FEATURE's lifecycle stage, not where the problem was found. (Canon: `agentic-qa-core/references/defect-management-doctrine.md` Part 1.)
+  - `qa_assignee` (`{{jira.qa_assignee}}`) = the authenticated session user (self-assign). Set it when a Story is TAKEN INTO TESTING (start_testing) and on every filed Bug / Defect / Improvement. NEVER-OVERWRITE an existing owner (read-before-write); distinct from the native dev `assignee` (Part 2).
+  - `components` (native, MANDATORY) = the affected product module/Epic, must pre-exist in the Jira Components module (Part 3).
+  - Three-axis model: **parent** = QA Defect Management process epic (`qa.qa_epics.defect_epic`, found-or-created — NEVER a product/dev epic, NEVER the Story); **issue link** = the source Story (traceability); **components** = product module (Part 4).
+  - `priority` (native) is auto-derived from `{{jira.severity}}` (critica→Highest, mayor→High, moderada→Medium, menor→Low, trivial→Lowest); override with a 1-line justification (Part 5.1).
+  - Three stages, always in order: Stage 1 Planning → Stage 2 Execution → Stage 3 Reporting. Hand off Stages 4/5/6 to `test-documentation` / `test-automation` / `regression-testing`.
+  - Jira is source of truth. Read tickets via `bun run jira:sync-issues get <KEY> --include-comments`, then the synced `.md`. NEVER `acli workitem view` for custom fields (returns `null`).
+  - Bugs run the veto + triage + risk-score decision tree BEFORE any ATP is written.
+  - Execution = smoke pass first, then trifuerza (UI/API/DB) exploration; capture evidence under the PBI folder.
+  - API testing = three-tool maneuver: OpenAPI MCP for schema (READ-ONLY) → `bun run api:login` for the token (→ `.auth/tokens.env`) → **curl** for authenticated requests. NEVER execute via the OpenAPI MCP. Canon: `agentic-qa-core/references/api-testing-doctrine.md`.
+  - Consult `domain-glossary.md` (if present) before authoring the ATP, refined ACs, and TC outlines.
+  - On any subagent failure: STOP, report partial state, offer retry / skip-stage / abort. No auto-fix, no auto-rollback.
+  - Stage 1 Set-first order (Modality jira-xray — AUTHORITATIVE): the Story's coverage backbone is its **ATS** (`ATS: {US_ID}: {story title}` — mandatory per Story, even with a single TC; parent: QA Test Artifacts epic; components inherited from the Story). Create the sprint `Test` issues, put ALL of them in the ATS, and link **ATS→Story** via the `test` slug (Story `is tested by` ATS) — the ONLY coverage-bearing edge (fills the Xray coverage panel); Story↔ATP and Story↔ATR links are administrative traceability with ZERO coverage.
+  - The ATP item is find-or-created FROM the `{{jira.acceptance_test_plan}}` field (where shift-left authored it) — pre-sprint the ATP lives ONLY in that field; Stage 1 is where the Test Plan item is born (parent: QA Master Test Plan epic).
+  - Derive, never re-list: the ATP's and the ATR Execution's test lists are DERIVED from the ATS membership — never maintained as independent id lists (three hand-maintained lists drift silently and corrupt coverage).
+  - ATR always with environment (HARD GATE): create the ATR / retest Execution ALWAYS carrying the Test Environment resolved from `active_env` in `.agents/project.yaml` (or the session env switch). No ATR without environment — an environment-less Execution fails the Stage-1 DoD gate (`agentic-qa-core/references/stage-gates.md`).
+  - TC∈ATS / TC∈ATP / TC∈ATR membership is Xray-internal (GraphQL) — NEVER expressed as Jira issue links in Modality jira-xray. Do NOT link TCs directly to the Story (last-resort only, for instances with no Test Set work type).
+  - Bug retest (Modality jira-xray): ONE repro `Test` by default, created at fix-verification time (Stage 2), linked Bug↔Test via the `test` slug and executed in the retest Execution (`ReTest: {BUG_KEY}: {summary}`); 1:N only with a written test-design justification. Modality jira-native: no in-sprint TCs (the bug is the immediate retest case) — persistent-Test decisions defer to Stage 4.
+  - STP find-or-create fires on the sprint's FIRST ticket: `STP: Sprint#{N}: {objective}` (Test Plan item, parent: QA Master Test Plan; a LIVING planner — append each tested ticket, keep progress current). The sprint recap Execution `STR: Sprint#{N}: Regression Testing` (parent: QA Test Artifacts) is created at sprint close.
 ---
 
 ## Forbidden invocations
@@ -34,7 +60,7 @@ Requires `agentic-qa-core`. Loads on demand:
 
 - `agentic-qa-core/references/test-design-doctrine.md` — **MANDATORY before designing any ATP / TC coverage from acceptance criteria.** Governs the 5 principles, the floor-not-ceiling coverage model, the 1:N explode-default rule, and the formal-technique triggers.
 - `agentic-qa-core/references/defect-management-doctrine.md` — **MANDATORY before taking a Story into testing and before filing any Bug / Defect / Improvement.** Governs issue-type classification (Bug vs Defect vs Improvement by feature lifecycle), the QA-Assignee self-assign + never-overwrite rule, mandatory Components, the three-axis model (parent = QA process epic · link = source Story · components = product module), and Severity→Priority auto-derive.
-- `agentic-qa-core/references/briefing-template.md`, `./dispatch-patterns.md`, `./orchestration-doctrine.md`, `./session-management.md`, `./preflight-gate.md`, `./adr-doctrine.md` — cited inline by the sections that use them.
+- `agentic-qa-core/references/briefing-template.md`, `agentic-qa-core/references/dispatch-patterns.md`, `agentic-qa-core/references/orchestration-doctrine.md`, `agentic-qa-core/references/session-management.md`, `agentic-qa-core/references/preflight-gate.md`, `agentic-qa-core/references/adr-doctrine.md` — cited inline by the sections that use them.
 
 ## Compact Rules
 
@@ -74,7 +100,7 @@ Canonical reading order for any AI starting cold on a sprint-testing workflow. R
 1. `.agents/project.yaml` — project identity, env URLs, `{{PROJECT_KEY}}`, MCP names, active environment.
 2. `.agents/jira-required.yaml` — canonical slug catalog (custom fields, statuses, transitions) for the active workspace.
 3. `.agents/jira-fields.json` — slug → numeric custom-field-ID mapping for `{{jira.<slug>}}` resolution at runtime.
-4. `.agents/jira-workflows.json` — workflow + transition catalog (resolves Ready For QA → In Testing → Tested for Story / Bug / Test Case work types).
+4. `.agents/jira-workflows.json` — workflow + transition catalog, **the authoritative source of every status / transition name** (resolves Ready For QA → In Test → QA Approved for Story / Bug / Test Case work types). A status that is not in this file does not exist in the instance.
 5. `.context/PBI/epics/EPIC-<KEY>-<slug>/stories/STORY-<KEY>-<slug>/context.md` — ticket-local context: session notes, open questions (hand-authored; read if it already exists from a prior Session Start). NON-Jira file — never a Jira mirror.
 6. `.context/master-test-plan.md` — regression Epic pointer, modality decision (Xray vs Jira-native), what to test and why.
 7. `.context/business/business-feature-map.md` — feature catalog vocabulary; resolves "what epic owns this story" for the `epics/EPIC-<KEY>-<slug>/` PBI folder naming (module = Epic, 1:1).
@@ -89,15 +115,15 @@ Canonical reading order for any AI starting cold on a sprint-testing workflow. R
 
 ## Subagent Dispatch Strategy
 
-> **Orchestration & Session contracts**: this skill follows `./orchestration-doctrine.md` (mandatory subagent dispatch — main thread is command center) AND `./session-management.md` (Phase 0 resume check, plan-first persistence at `.session/<skill-slug>/<scope>/`, archive on completion). Phase 0 (resume check) and Phase 1 (plan write) are NOT optional. The orchestrator also applies the per-stage **Definition-of-Done gates** in `./stage-gates.md`: verify a stage's DoD (planning stages include the Test-Design Checklist) BEFORE recording its progress checkpoint and advancing.
+> **Orchestration & Session contracts**: this skill follows `agentic-qa-core/references/orchestration-doctrine.md` (mandatory subagent dispatch — main thread is command center) AND `agentic-qa-core/references/session-management.md` (Phase 0 resume check, plan-first persistence at `.session/<skill-slug>/<scope>/`, archive on completion). Phase 0 (resume check) and Phase 1 (plan write) are NOT optional. The orchestrator also applies the per-stage **Definition-of-Done gates** in `agentic-qa-core/references/stage-gates.md`: verify a stage's DoD (planning stages include the Test-Design Checklist) BEFORE recording its progress checkpoint and advancing.
 
-This skill scopes per ticket. Single-ticket mode: `<scope>` = `<JIRA-KEY>` (e.g. `UPEX-123`). Batch-sprint mode: `<scope>` = `sprint-<N>/<JIRA-KEY>` (one nested directory per ticket in the wave). Session state lives at `.session/sprint-testing/<scope>/{plan.md, progress.md}` per `agentic-qa-core/references/session-management.md` §3 + §9. The per-ticket `test-session-memory.md` is a SEPARATE concern: it carries TMS modality + ticket context + stage state shared across the 4 sub-agent dispatches (domain memory). Both files coexist — `plan.md` indexes the session; `test-session-memory.md` holds the cross-stage shared payload.
+This skill scopes per ticket. Single-ticket mode: `<scope>` = `<JIRA-KEY>` (e.g. `UPEX-123`). Batch-sprint mode: `<scope>` = `sprint-<N>/<JIRA-KEY>` (one nested directory per ticket in the wave). Session state lives at `.session/sprint-testing/<scope>/{plan.md, progress.md, test-session-memory.md}` per `agentic-qa-core/references/session-management.md` §3 + §9. `test-session-memory.md` is a SEPARATE concern from `plan.md`: it carries TMS modality + ticket context + stage state shared across the 4 sub-agent dispatches (domain memory). All three coexist — `plan.md` indexes the session, `progress.md` decides the next stage, `test-session-memory.md` holds the cross-stage shared payload.
 
-This skill is compliant with the doctrine in `CLAUDE.md` §"Orchestration Mode (Subagent Strategy)" and the session contract in `.claude/skills/agentic-qa-core/references/session-management.md`. Every dispatch follows the 6-component briefing format defined in `.claude/skills/agentic-qa-core/references/briefing-template.md`, and the pattern selected per stage matches the decision guide in `.claude/skills/agentic-qa-core/references/dispatch-patterns.md`. This skill operates in two modes (single-ticket and batch-sprint) and BOTH modes use the same four dispatch points per ticket — Session Start -> Stage 1 -> Stage 2 -> Stage 3. The only difference is that batch mode loops them once per ticket. The full briefings (Goal / Context docs / Skills to load / Exact instructions / Report format / Rules) live in `references/sprint-orchestration.md` §"Sub-agent prompt templates".
+This skill is compliant with the doctrine in `CLAUDE.md` §"Orchestration Mode (Subagent Strategy)" and the session contract in `.claude/skills/agentic-qa-core/references/session-management.md`. Every dispatch follows the 7-component briefing format defined in `.claude/skills/agentic-qa-core/references/briefing-template.md`, and the pattern selected per stage matches the decision guide in `.claude/skills/agentic-qa-core/references/dispatch-patterns.md`. This skill operates in two modes (single-ticket and batch-sprint) and BOTH modes use the same four dispatch points per ticket — Session Start -> Stage 1 -> Stage 2 -> Stage 3. The only difference is that batch mode loops them once per ticket. The full briefings (Goal / Context docs / Project Standards (auto-resolved) / Skills to load / Exact instructions / Report format / Rules) live in `references/sprint-orchestration.md` §"Sub-agent prompt templates".
 
 | Stage                                              | Pattern    | Subagent role                                                                                                                                                                  |
 |----------------------------------------------------|------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Session Start (per-ticket)                         | Single     | dispatch a session-start subagent: fetch ticket from issue tracker, load `.context/`, create the PBI folder + `context.md` + `test-session-memory.md`, return ticket summary + AC list |
+| Session Start (per-ticket)                         | Single     | dispatch a session-start subagent: fetch ticket from issue tracker, load `.context/`, create the PBI folder + `context.md` and the session dir + `test-session-memory.md`, return ticket summary + AC list |
 | Stage 1 — Planning (ATP + draft TCs + risk triage) | Sequential | dispatch a Planning subagent: produce the ATP artifact + risk score + draft TC outlines; bug tickets get the veto + triage decision tree applied                                |
 | Stage 2 — Execution (smoke + UI/API/DB exploration)| Sequential | dispatch an Execution subagent: smoke pass first, then triforce (UI/API/DB) exploration; capture evidence under the PBI folder; surface BUG_FOUND if applicable                  |
 | Stage 3 — Reporting (ATR + QA comment + transition)| Sequential | dispatch a Reporting subagent: fill the ATR, post the QA comment, transition the issue, file bug reports if any                                                                 |
@@ -131,18 +157,28 @@ Rules for picking:
 
 ```
 Session Start (always first)
-    -> PBI folder + context.md + test-session-memory.md
+    -> PBI folder + context.md · session dir + test-session-memory.md
     -> Story explanation, WAIT for user OK
 
 Stage 1 — Planning
     -> For Story: triage risk + Test Analysis + ATP/ATR + TC OUTLINES (names + 1-line precond/expected)
                   jira-native -> NO `Test` work items here (created in Stage 4, regression-worthy only)
-                  jira-xray   -> CREATE + EXECUTE `Test` issues for the planned outlines at executable
-                                 detail, run via a Test Execution (Xray plugin design). Stage 4 promotes
-                                 the regression-worthy ones into the Regression Test Plan.
-    -> For Bug:   veto check + Bug Analysis + ATP/ATR (no TCs in-sprint — the bug IS the immediate
-                  retest case). If regression-worthy, Stage 4 ensures a persistent Test covers it —
-                  REUSE the existing failed Test or CREATE one (golden rule; both modalities).
+                  jira-xray   -> Set-first order (see "Stage 1 Set-first order" below): ① CREATE +
+                                 EXECUTE `Test` issues at executable detail + the Story's ATS (Test
+                                 Set) created/updated holding ALL of them ② ATP item find-or-created
+                                 FROM the {{jira.acceptance_test_plan}} field content ③ ATP/ATR test
+                                 lists DERIVED from the ATS membership ④ ATR always created WITH the
+                                 Test Environment.
+                                 Stage 4 promotes the regression-worthy ones into the Regression Test Plan.
+    -> For Bug:   veto check + Bug Analysis + ATP/ATR.
+                  jira-xray   -> ONE repro `Test` by default, created at fix-verification time (1:N
+                                 only if the scope genuinely covers distinct conditions — justify per
+                                 test-design-doctrine), executed in the retest Execution, PASSED/FAILED
+                                 recorded. Bug↔Test linked via the `test` slug (Bug is coverable).
+                  jira-native -> no TCs in-sprint (the bug IS the immediate retest case; defers to
+                                 Stage 4). If regression-worthy, Stage 4 ensures a persistent Test
+                                 covers it — REUSE the existing failed Test or CREATE one (golden
+                                 rule; both modalities).
     -> See references/acceptance-test-planning.md and references/feature-test-planning.md
     -> TC work-item timing rule -> see "TC creation timing (modality-aware)" below
 
@@ -169,7 +205,7 @@ Stage 3 — Reporting
 
 | | **Modality jira-native** | **Modality jira-xray** (`bun xray` CLI) |
 |---|---|---|
-| Stage 1 (Planning) | TC **outlines only** (names + 1-line precond/expected in the ATP). **No `Test` work items** — a native `Test` issue IS documentation, so it waits for the Stage-4 regression-worthy gate. | **ASK the format once per batch** (see "Test-case format — ask once per batch" below), then **create + execute** Xray `Test` issues for the **planned outlines**, at *executable* detail (preconditions + runnable steps), and run them via a **Test Execution** — all in one pass. By Xray's plugin design the `Test` is the execution unit, so generating these artifacts is what makes the rest of the Xray flow work. **Manual** tests are created **without inline steps**, then steps are added one-by-one (see "Manual Xray test steps — two-step creation"). |
+| Stage 1 (Planning) | TC **outlines only** (names + 1-line precond/expected in the ATP). **No `Test` work items** — a native `Test` issue IS documentation, so it waits for the Stage-4 regression-worthy gate. | **ASK the format once per batch** (see "Test-case format — ask once per batch" below), then **create + execute** Xray `Test` issues for the **planned outlines**, at *executable* detail (preconditions + runnable steps), and run them via a **Test Execution** — all in one pass. By Xray's plugin design the `Test` is the execution unit, so generating these artifacts is what makes the rest of the Xray flow work. All created Tests are aggregated into the Story's **ATS** and the Plan/Execution lists derive from that membership (see "Stage 1 Set-first order" below). **Manual** tests are created **without inline steps**, then steps are added one-by-one (see "Manual Xray test steps — two-step creation"). |
 
 #### Test-case format — ask once per batch (Modality jira-xray, Stage 1) — AUTHORITATIVE
 
@@ -188,6 +224,19 @@ Xray Cloud **silently drops** steps passed inline to `test create`. So whenever 
 2. **Add each step one-by-one** via `[TMS_TOOL] Add Test Step` (action / data / expected per step) — the `/xray-cli` skill carries the concrete CLI syntax.
 
 Optionally **verify** with `[TMS_TOOL] Get Test` that the steps landed. Gherkin/Cucumber Tests are unaffected (the Gherkin is one field) — this two-step rule applies to **Manual** tests only.
+
+#### Stage 1 Set-first order (Modality jira-xray) — AUTHORITATIVE
+
+The Story's coverage backbone is its **ATS** (Acceptance Test Set — `ATS: {US_ID}: {story title}`, `{US_ID}` = the Story key; mandatory per Story, even with a single TC). Stage 1 runs in THIS order:
+
+1. **ATS holding ALL the Story's TCs.** Create the sprint `Test` issues, then create/update the Story's ATS (parent: **QA Test Artifacts** epic; **components inherited from the Story — mandatory**) with ALL of them as members, and link **ATS→Story** via the `test` slug (`{{jira.link_types.test}}`, Story `is tested by` ATS). This link is what fills the Xray coverage panel (live-verified); the ATP→Story and ATR→Story links are administrative traceability only and contribute ZERO coverage.
+2. **ATP item FROM the field (find-or-create).** Pre-sprint the ATP lives ONLY in `{{jira.acceptance_test_plan}}` — the shift-left pass is field-first and does NOT create the item. Find-or-create the Test Plan issue `ATP: {STORY-KEY}: {story title}` (parent: **QA Master Test Plan** epic) and seed its description from the field content; if the field is empty (no shift-left pass), author the ATP normally and write both the item and the field.
+3. **Derive, never re-list.** The ATP's test list and the ATR Execution's test list are DERIVED from the ATS membership — never maintained as three independent id lists.
+4. **ATR always with environment.** Create the ATR Execution (`ATR: {STORY-KEY}: Story Testing`, parent: **QA Test Artifacts**) ALWAYS carrying the Test Environment resolved from `active_env` in `.agents/project.yaml` (or the session env switch). **No ATR without environment** — hard gate: `agentic-qa-core/references/stage-gates.md` §Stage 1.
+
+TC∈ATS / TC∈ATP / TC∈ATR membership is Xray-internal (GraphQL) — NEVER expressed as Jira issue links in this modality. In jira-native, an instance WITH the Test Set work type expresses membership as `TC→ATS` issue links (explicit carve-out from the no-membership-links rule, which is xray-only); an instance WITHOUT it has no ATS — fall back to direct `TC→Story` links.
+
+Intended stage asymmetry (not drift): in-sprint Stage 1 creates the TCs first and groups them into the ATS incrementally as they land, while Stage 4 module-driven (`test-documentation`) pre-creates the containers before the first TC because parallel sharding needs the targets to exist.
 | Stage 2 (Execution) | Run planned outlines **+ explore beyond them**; track outline status (PASS/FAIL) in `test-session-memory.md`. | Execute the created Tests in the Test Execution; **explore beyond them**. A throwaway exploratory probe becomes a `Test` ONLY if it found a defect or is worth repeating — otherwise it stays as session evidence / a bug, NOT a `Test` (avoid one-shot-Test explosion). |
 | Stage 4 (`test-documentation`) | **Create** `Test` work items **only for regression-worthy** scenarios (Candidate/Manual) after ROI; apply the feature/Epic label (native's organizer — no Test Set entity). Deferred → report only, no TMS `Test`. | **Select + promote**: from the sprint Xray Tests, the regression-worthy ones (Candidate/Manual) get **enriched** (rich Gherkin, parameterization, edge elaboration), **labelled** `regression-candidate`, **added to the feature Test Set** (1:1 Epic, created lazily if missing) **and the Regression Test Plan**. Deferred sprint Tests stay tied to their Test Execution as historical record — **not promoted, not deleted**. |
 
@@ -234,7 +283,7 @@ Before Session Start dispatch, run the resume contract from `agentic-qa-core/ref
 3. If it does NOT exist → proceed to Session Start (writes `plan.md`).
 4. If it DOES exist:
    - Read `plan.md` + tail of `progress.md`.
-   - Optionally read `.context/PBI/epics/EPIC-<KEY>-<slug>/stories/STORY-<KEY>-<slug>/test-session-memory.md` for the per-ticket domain state (load-bearing across the 4 sub-agent dispatches).
+   - Optionally read `.session/sprint-testing/<scope>/test-session-memory.md` for the per-ticket domain state (load-bearing across the 4 sub-agent dispatches).
    - Surface to the user: last completed stage (Session Start / Stage 1 / Stage 2 / Stage 3) + next stage + any unresolved BUG_FOUND or TOOL FAILURE from the last entry.
    - Offer **resume / restart / abort**. On `restart`, archive to `.session/.archive/<YYYY-MM-DD>-sprint-testing-<scope>-aborted/` first.
 
@@ -246,7 +295,7 @@ Batch-sprint mode: Phase 0 fires once per ticket as the loop enters it (NOT once
 
 Every invocation starts by initializing the session, even in batch mode. Session Start:
 
-0. **Resolve TMS modality** (Xray on Jira vs Jira-native). By excellence ATP/ATR are real Jira items — a `Test Plan` issue (`ATP: {STORY-KEY}: {story title}`) parented to the **QA Master Test Plan** epic, and a `Test Execution` issue (`ATR: {STORY-KEY}: Story Testing`) parented to the **QA Test Artifacts** epic; the Story custom-field + comment mirror (Modality jira-native) is a **fallback ONLY** when those work types are unavailable. The modality probe decides which path is live. Title grammar + epic parenting + the Feature-altitude FTP/FTR names: `references/acceptance-test-planning.md`. Full resolution algorithm lives in `test-documentation/SKILL.md` §Phase 0 — apply the same four-step probe here (CLAUDE.md -> master-test-plan.md -> list issue types -> ask the user). Persist the result into `test-session-memory.md`.
+0. **Resolve TMS modality** (Xray on Jira vs Jira-native). By excellence ATP/ATR/ATS are real Jira items — a `Test Plan` issue (`ATP: {STORY-KEY}: {story title}`) parented to the **QA Master Test Plan** epic, a `Test Execution` issue (`ATR: {STORY-KEY}: Story Testing`) parented to the **QA Test Artifacts** epic, and a `Test Set` issue (`ATS: {US_ID}: {story title}`, the Story's coverage backbone) also parented to **QA Test Artifacts**; the Story custom-field + comment mirror (Modality jira-native) is a **fallback ONLY** when those work types are unavailable. Pre-sprint the ATP lives ONLY in the `{{jira.acceptance_test_plan}}` field — Stage 1 is where the Test Plan item is born (find-or-create from the field). The modality probe decides which path is live. Title grammar + epic parenting + the Feature-altitude FTP name: `references/acceptance-test-planning.md`. Full resolution algorithm lives in `test-documentation/SKILL.md` §Phase 0 — apply the same four-step probe here (CLAUDE.md -> master-test-plan.md -> list issue types -> ask the user). Persist the result into `test-session-memory.md`.
 0.1. **Load required tool skills** — based on the TMS modality resolved in Step 0:
    - Always load `/acli` (Jira WRITE operations: comment, transition, link, custom-field update, bug creation). Detailed READS (ACs, ATP/ATR, description, comments) do NOT use `/acli` — they use `bun run jira:sync-issues get <KEY> --include-comments` then read the synced `.md`. See `agentic-qa-core/references/acli-integration.md` §"Reads vs writes".
    - In **Modality jira-xray**: also load `/xray-cli` for Test / Test Execution / Test Plan / Test Run operations and traceability reads.
@@ -264,20 +313,29 @@ Every invocation starts by initializing the session, even in batch mode. Session
    - On hard failure: **STOP and surface to the user before Stage 1.** Do NOT dispatch the Session Start subagent and do NOT author an ATP against a dead env — that is the single highest-cost waste in a run. Offer the user a session env override (see Gotcha 15) if they have a working alternate URL.
    - **Inbox receive-check** (only when the ticket is email / magic-link / auth-token dependent — inferred from the invocation, ticket type, labels, or title): confirm the configured mailbox/provider can actually *receive*, not just send. A send-only provider (e.g. a domain configured for outbound only) cannot complete a magic-link flow. If it cannot receive, STOP and surface before Stage 1.
    - This is a *reachability* gate (is the env even up? can we get the email?), distinct from the Stage 2 smoke test (does the *feature* work?). Both run; they answer different questions — keep anti-pattern S7 and the smoke pass as-is.
+0.7. **Sprint Test Plan (STP) find-or-create** (orchestrator-inline; fires on the FIRST ticket of a sprint, any mode):
+   - Resolve the ticket's sprint number N. Search for `STP: Sprint#{N}: {objective}` — a **Test Plan** item parented to the **QA Master Test Plan** epic.
+   - **Missing** → create it (find-or-create; `/regression-testing` creates it as fallback if it runs suites first). **Present** → UPDATE it: the STP is a LIVING sprint planner — append this ticket to its scope and keep progress current after every tested ticket.
+   - It closes at sprint end; the sprint recap Execution `STR: Sprint#{N}: Regression Testing` (parent: **QA Test Artifacts**) is created at sprint close — batch-close recap or `/regression-testing`, whichever arrives first creates it, the other completes it (see `references/sprint-orchestration.md` §STEP 7).
+   - Modality jira-native without the Test Plan work type: skip with a note (there is no field fallback at sprint altitude); non-blocking.
 1. Fetches the ticket via `bun run jira:sync-issues get <KEY> --include-comments` (title, ACs, priority, comments), then reads the synced `.md` files under the STORY folder. NEVER `acli workitem view` for custom fields.
 2. Extracts Team Discussion from the synced `comments.md` (decisions, tech notes, edge cases, blockers). Non-blocking.
 3. Loads the project-wide context files: `.context/business/business-data-map.md`, `.context/business/business-feature-map.md`, `.context/business/business-api-map.md`, `.context/master-test-plan.md`.
-4. Loads or creates `module-context.md` (3-level hierarchy: project -> module -> ticket).
+4. Loads `module-context.md` (3-level hierarchy: project -> module -> ticket) if the sync materialized it; if absent, drafts the body and publishes it into the Epic description's `## Module Context (QA)` section (read-first, never overwrite), then re-syncs — the local file is Jira-synced, never authored by hand (see `references/session-entry-points.md` Step 4).
 5. Explores backend (`{{BACKEND_REPO}}`) + frontend (`{{FRONTEND_REPO}}`) code.
 6. Finds test data candidates via `[DB_TOOL]` on `{{DB_MCP}}`.
-7. Creates the PBI folder and files:
+7. Creates the PBI folder and the session directory:
    ```
    .context/PBI/epics/EPIC-<KEY>-<slug>/stories/STORY-{{PROJECT_KEY}}-{number}-{brief-title}/
-     context.md                # hand-authored: session notes + open questions (NON-Jira)
-     test-session-memory.md    # hand-authored: shared memory across the 4 sub-agent dispatches (NON-Jira)
-     evidence/                 # screenshots, gitignored
+     context.md                # hand-authored: session notes + open questions (NON-Jira, local-only)
+     evidence/                 # screenshots (NON-Jira, local-only)
+
+   .session/sprint-testing/<scope>/
+     test-session-memory.md    # hand-authored: shared memory across the 4 sub-agent dispatches
    ```
    Jira-mirrored files (`story.md`, `acceptance-criteria.md`, `acceptance-test-plan.md`, `acceptance-test-results.md`, `comments.md`, etc.) are NOT hand-written here — they are materialized by `bun run jira:sync-issues get <KEY> --include-comments`.
+
+   The whole PBI tree is gitignored (it is a Jira cache; see `CLAUDE.md` §9), so `context.md` and `evidence/` are local-only by construction. `test-session-memory.md` lives in `.session/` instead because a re-sync rewrites the PBI cache wholesale and this file is what every resume and every sub-agent reads.
 8. **Writes the session `plan.md`** at `.session/sprint-testing/<scope>/plan.md` per `agentic-qa-core/references/session-management.md` §6 — Goal (one sentence per ticket), Inputs (PBI paths + TMS modality + Team Discussion summary), Approach (mode + per-stage dispatch pattern), Phase breakdown (Session Start / Stage 1 / Stage 2 / Stage 3 with dispatch pointer + exit condition), Risks (from triage), Verification checklist, Cross-references (cites `context.md`, `test-session-memory.md`, `acceptance-test-plan.md`, `acceptance-test-results.md`).
 9. Writes a Story Explanation and **STOPS** for user confirmation. Do not proceed until the user OK's.
 10. After OK, appends the first progress entry `## Session Start — <ts>` with `status: completed`, `next: Stage 1 — Planning` to `.session/sprint-testing/<scope>/progress.md`.
@@ -294,7 +352,7 @@ Details, templates and error table live in `references/session-entry-points.md`.
 
 Run the same 4 dispatches. Per-stage payload differences:
 
-- Stage 1 (per "TC creation timing"): Triage risk -> Test Analysis -> ATP/ATR -> **jira-native**: TC **outlines** only, no `Test` work items; **jira-xray**: ask the TC format once per batch (Manual vs Gherkin), then **create + execute** `Test` issues for the planned outlines at executable detail via a Test Execution (Manual tests = create-then-add-step, per "Manual Xray test steps — two-step creation"). Persistent regression TCs are created (native) / promoted (xray) in Stage 4. **Traceability (jira-xray)**: link the **Story only to its ATP and ATR** ("is tested by"); link each created **TC to the ATP (designed-by) and the ATR (executed-by)** — do NOT link TCs directly to the Story (see Gotcha #9). Verify with `[TMS_TOOL] trace`.
+- Stage 1 (per "TC creation timing"): Triage risk -> Test Analysis -> ATP/ATR -> **jira-native**: TC **outlines** only, no `Test` work items; **jira-xray**: ask the TC format once per batch (Manual vs Gherkin), then **create + execute** `Test` issues for the planned outlines at executable detail via a Test Execution (Manual tests = create-then-add-step, per "Manual Xray test steps — two-step creation"). Persistent regression TCs are created (native) / promoted (xray) in Stage 4. **Traceability (jira-xray) — Set-first** (per §"Stage 1 Set-first order"): ① the Story's **ATS** (`ATS: {US_ID}: {story title}`) created/updated holding ALL the created TCs, linked **ATS→Story** via the `test` slug — the coverage link ② ATP item find-or-created FROM the `{{jira.acceptance_test_plan}}` field ③ ATP/ATR test lists DERIVED from the ATS membership ④ ATR created WITH the Test Environment (`active_env`). ATP→Story / ATR→Story links stay as administrative traceability; do NOT link TCs directly to the Story (last-resort only, for instances with no Test Set work type — see Gotcha #9). Verify with `[TMS_TOOL] trace`.
 - Stage 2: Smoke test -> UI / API / DB exploration **beyond the planned outlines** -> update outline status (native) or Test runs in the Test Execution (xray) PASSED / FAILED -> fold any newly-discovered partition/boundary/transition back into the outline set; an exploratory probe becomes a `Test` only if it found a defect or is worth repeating -> file bugs if any.
 - Stage 3: Author ATR Test Report -> apply the modality branch (reporting-templates.md §2.3-2.4): Modality jira-native -> write the `{{jira.acceptance_test_results}}` field (or `## Acceptance Test Results (ATR)` fallback comment) then `jira:sync-issues get <KEY> --include-comments` -> `acceptance-test-results.md` in the STORY folder; Modality jira-xray -> update the Test Execution then `jira:sync-issues get <ATR_KEY>` -> `.context/PBI/test-executions/TESTEXEC-<ATR_KEY>-<slug>.md` -> QA comment via `[ISSUE_TRACKER_TOOL]` -> transition ticket.
 - **Per-stage progress checkpoint**: after each Stage subagent returns, the orchestrator appends a phase entry to `.session/sprint-testing/<scope>/progress.md` per `agentic-qa-core/references/session-management.md` §7 (`status: completed`, `dispatched_as: Sequential`, `next: Stage <N+1> | hand-off`).
@@ -307,7 +365,9 @@ Run the same 4 dispatches; the Stage 1 briefing additionally applies the veto + 
 
 - Triage: veto table (see Gotchas) -> if SKIP, run Code-Review workflow and finish (Stage 2 + Stage 3 dispatches collapse to the in-place comment + transition; the orchestrator skips them only if the Stage 1 subagent reports `veto_outcome: skip`).
 - Risk score only if no veto applies. 0-3 LOW, 4-7 MEDIUM (ask user), 8+ HIGH.
-- Create ATP + ATR, no TCs in-sprint (the bug is the immediate retest case). Fill Bug Analysis inside the ATP. **Regression follow-up**: if the bug is regression-worthy, Stage 4 (`test-documentation` bug-driven decision) ensures a persistent Test covers it — reuse the existing failed Test or create one (golden rule). Not every bug qualifies; a one-time typo in a stable area is treated like a failed test.
+- Create ATP + ATR (the ATR is the retest Execution `ReTest: {BUG_KEY}: {summary}`, ALWAYS created with the Test Environment from `active_env` — no ATR without environment). Fill Bug Analysis inside the ATP.
+- **Repro Test (Modality jira-xray only)**: create ONE repro `Test` by default, at fix-verification time (Stage 2) — 1:N only if the bug's scope genuinely covers distinct conditions (justify per `agentic-qa-core/references/test-design-doctrine.md`). Link **Bug↔Test** via the `test` slug (`{{jira.link_types.test}}`, Bug `is tested by` Test — bugs are coverable), execute it in the retest Execution and record PASSED/FAILED. **Modality jira-native**: unchanged — no TCs in-sprint (the bug is the immediate retest case); persistent-Test decisions defer to Stage 4.
+- **Regression follow-up**: if the bug is regression-worthy, Stage 4 (`test-documentation` bug-driven decision) ensures a persistent Test covers it — reuse the existing failed Test (or the in-sprint repro Test) or create one (golden rule). Not every bug qualifies; a one-time typo in a stable area is treated like a failed test.
 - Execute: reproduce original bug -> verify fix -> regression pass on adjacent areas -> DB cross-validation if data-integrity bug.
 - Report: update ATR, post comment (Template C PASSED or Template D FAILED), provide 1-2 evidence screenshot paths to the user.
 
@@ -315,7 +375,7 @@ Run the same 4 dispatches; the Stage 1 briefing additionally applies the veto + 
 
 - Pre-step: generate `SPRINT-{N}-TESTING.md` from the sprint backlog if it does not exist (see `sprint-orchestration.md`).
 - Loop: read Wave 1 for the first `PENDING` ticket, dispatch the same 4-stage sequence per ticket, after each ticket update the framework file + present a per-ticket summary + wait for user OK.
-- **Interrupted session resume**: on loop entry per ticket, Phase 0 reads `.session/sprint-testing/sprint-<N>/<TICKET>/progress.md` (canonical resume signal per `agentic-qa-core/references/session-management.md` §4). Domain state for an in-flight ticket is in `.context/PBI/epics/EPIC-<KEY>-<slug>/stories/STORY-<KEY>-<slug>/test-session-memory.md` (load-bearing for the 4 sub-agent dispatches). The two files serve different concerns: `progress.md` decides "which stage is next?"; `test-session-memory.md` carries the per-ticket payload that each sub-agent reads. Both are checked.
+- **Interrupted session resume**: on loop entry per ticket, Phase 0 reads `.session/sprint-testing/sprint-<N>/<TICKET>/progress.md` (canonical resume signal per `agentic-qa-core/references/session-management.md` §4). Domain state for an in-flight ticket sits beside it in `.session/sprint-testing/sprint-<N>/<TICKET>/test-session-memory.md` (load-bearing for the 4 sub-agent dispatches). The two files serve different concerns: `progress.md` decides "which stage is next?"; `test-session-memory.md` carries the per-ticket payload that each sub-agent reads. Both are checked, and both survive a `jira:sync-issues` re-pull because neither lives in the PBI cache.
 - After each stage subagent returns, the orchestrator appends a phase entry to `progress.md` per `agentic-qa-core/references/session-management.md` §7. After Stage 3 completes, the orchestrator runs Archive: moves `.session/sprint-testing/<scope>/` to `.session/.archive/<YYYY-MM-DD>-sprint-testing-<scope>/` and calls `mem_session_summary`. The PBI artifacts under `.context/PBI/` and the framework file `SPRINT-{N}-TESTING.md` stay in place — those are the canonical deliverables.
 - Stop on TOOL FAILURE. Pause on BUG_FOUND. Update framework file ONLY after Stage 3 completes.
 
@@ -325,13 +385,13 @@ Run the same 4 dispatches; the Stage 1 briefing additionally applies the veto + 
 
 1. **Credentials**: always from `.env`. Never hardcode. Never guess passwords.
 2. **PBI folder naming**: canonical layout is `.context/PBI/epics/EPIC-<KEY>-<slug>/stories/STORY-<KEY>-<slug>/` (module = Epic, 1:1). `<slug>` is max 5 words, kebab-case, AI-generated from the ticket title. Epic-level files live in the EPIC folder; story-level files in the STORY folder.
-3. **Bugs get ATP + ATR, no TCs in-sprint**. The bug ticket is the implicit *immediate* test case; reproduction steps = test steps. But a regression-worthy bug MUST end with a persistent Test in Stage 4 — reuse the existing failed Test or create one (golden rule). Not every bug qualifies.
+3. **Bug TCs are modality-aware**. Modality jira-xray: ONE repro `Test` by default, created at fix-verification time (1:N only when the bug's scope genuinely covers distinct conditions — justify per `agentic-qa-core/references/test-design-doctrine.md`), linked Bug↔Test via the `test` slug, executed in the retest Execution with PASSED/FAILED recorded. Modality jira-native: ATP + ATR, no TCs in-sprint — the bug ticket is the implicit *immediate* test case; reproduction steps = test steps (defers to Stage 4). Either way a regression-worthy bug MUST end with a persistent Test in Stage 4 — reuse the existing failed Test (or the in-sprint repro Test) or create one (golden rule). Not every bug qualifies.
 4. **Smoke test is mandatory** as the first action in Stage 2. If smoke fails (No-Go), stop and report — do not proceed to deep exploration. Smoke failure is an env-level blocker and always stops; deep-exploration findings follow the graduated rule in #10 (a FAIL mid-pass is not auto-Critical).
 5. **Bug veto table — SKIP retesting** when the bug is pure text / CSS / docs / config / tech-debt cleanup with no functional change. **REQUIRE retesting** regardless of score when it touches money, data integrity, auth, external integrations, state machines, or calculations. Veto beats risk score.
 6. **TCs are created in Stage 1, NEVER in Stage 2**. Stage 2 executes what Planning produced; new TCs found during exploration are added via `[TMS_TOOL] tc create` but the rule is "planning first".
 7. **Explain the story -> WAIT for OK**. Never auto-proceed past Session Start without user confirmation. Same for bug triage — present the decision and wait.
 8. **Evidence directory**: always configure `.playwright/cli.config.json` `outputDir` to `.context/PBI/epics/EPIC-<KEY>-<slug>/stories/STORY-<KEY>-<slug>/evidence/` BEFORE using `[AUTOMATION_TOOL]`. Screenshots need the full path in `--filename` because `outputDir` does not apply to `.png`.
-9. **Traceability check after Stage 1** (Modality jira-xray): run `[TMS_TOOL] trace {TICKET}` and verify the model — the **Story is linked ONLY to its ATP (Test Plan) and ATR (Test Execution)** as "is tested by". **Individual TCs are NOT linked directly to the Story** (avoids noise); they aggregate via ATP/ATR — the **ATP "designs"** the TCs (TC "is designed by" ATP) and the **ATR "executes"** the TCs (TC "is executed by" ATR). So verify: Story↔ATP, Story↔ATR, each TC↔ATP (designed-by), each TC↔ATR (executed-by) — NOT TC↔Story. Full doctrine: `test-documentation/references/traceability-linking.md` + `tms-architecture.md`. Bugs: traceability "gaps" for missing TCs are expected and OK.
+9. **Traceability check after Stage 1** (Modality jira-xray): run `[TMS_TOOL] trace {TICKET}` and verify the Set-first model — the **coverage backbone is the ATS**: `ATS: {US_ID}: {story title}` linked to the Story via the `test` slug ("is tested by") and holding ALL the Story's TCs (Xray-internal membership, never issue links in this modality). **Story↔ATP and Story↔ATR** links exist as administrative traceability — they contribute ZERO coverage (live-verified). The ATP's and the ATR's test lists are DERIVED from the ATS membership. **Individual TCs are NOT linked directly to the Story** (last-resort only, for instances with no Test Set work type). So verify: Story↔ATS (`test` slug) + ATS membership complete + Story↔ATP, Story↔ATR (administrative) + Plan/Exec lists matching the ATS. Full doctrine: `agentic-qa-core/references/traceability-linking.md` + `test-documentation/references/tms-architecture.md`. Bugs: the repro Test links Bug↔Test via the `test` slug at fix-verification time; before that, traceability "gaps" for missing TCs are expected and OK.
 10. **Graduated stop/pause protocol**: TOOL FAILURE -> stop, report, await user. **Blocking** BUG_FOUND (smoke/env down, data integrity, security-exploitable) -> pause, present bug, await decision; NEVER dispatch the next sub-agent while unresolved. **Non-blocking** finding (cosmetic, minor validation, edge-case on a non-critical TC, framework-default pending recalibration) -> the Execution subagent logs it and CONTINUES the pass; the orchestrator surfaces it at Stage 2 close. A FAIL is not auto-Critical — triage first (severity per `references/reporting-templates.md` §1.4; security/auth/framework-default recalibrated at §5.0). See `references/exploration-patterns.md` "Finding triage".
 11. **Framework file update timing**: only update `SPRINT-{N}-TESTING.md` AFTER Stage 3 completes and the orchestrator-side checklist verifies. Not earlier.
 12. **Language**: all artifacts, TMS content, and commit messages in English. Mirror the user's language only in conversation.
@@ -346,7 +406,7 @@ Run the same 4 dispatches; the Stage 1 briefing additionally applies the veto + 
 
 | Predecessor | Load this skill | Reason |
 |-------------|-----------------|--------|
-| Pre-sprint AC refinement on a batch of backlog Stories | `shift-left-testing` | Stage 0. If the Story passed through `/shift-left-testing` and carries label `shift-left-reviewed` with a dated label <30 days old, Stage 1 here short-circuits Phases 1-3 of `acceptance-test-planning.md` and continues from Phase 4. If the Story did NOT pass through Shift-Left, Stage 1 runs all phases in full — but this is more expensive in-sprint than pre-sprint. |
+| Pre-sprint AC refinement on a batch of backlog Stories | `shift-left-testing` | Stage 0. If the Story passed through `/shift-left-testing` and carries label `shift-left-reviewed` with a dated label <30 days old, Stage 1 here short-circuits Phases 1-3 of `acceptance-test-planning.md` and continues from Phase 4. The shift-left pass leaves the ATP in the `{{jira.acceptance_test_plan}}` FIELD only (field-first — no Test Plan item pre-sprint); Stage 1 finds-or-creates the item FROM that field. The short-circuit reads the SYNCED `acceptance-test-plan.md`. If the Story did NOT pass through Shift-Left, Stage 1 runs all phases in full — but this is more expensive in-sprint than pre-sprint. |
 
 | After Stage 3 you need... | Load this skill | Reason |
 |---------------------------|-----------------|--------|
@@ -382,7 +442,7 @@ All references are self-contained. Load one at a time.
 | Reference | Read when |
 |-----------|-----------|
 | `sprint-orchestration.md` | Running batch-sprint mode, generating the `SPRINT-{N}-TESTING.md` framework file, resuming a session, updating framework tables, dispatching stage sub-agents, handling stop/pause/`continue-from`. |
-| `session-entry-points.md` | Initializing a session (any mode), loading project + module context, creating the PBI folder + `context.md` + `test-session-memory.md`, Team Discussion extraction rules, user-story workflow step order, bug Triage -> Verify -> Report workflow. |
+| `session-entry-points.md` | Initializing a session (any mode), loading project + module context, creating the PBI folder + `context.md` and the session dir + `test-session-memory.md`, Team Discussion extraction rules, user-story workflow step order, bug Triage -> Verify -> Report workflow. |
 | `acceptance-test-planning.md` | Stage 1 Planning — generating the ATP (Acceptance Test Plan) for a ticket, Test Analysis structure, TC nomenclature `{US_ID}: TC#: should <expected outcome> [<connector> <condition>] [given <precondition>]`, traceability creation + verification, and the Bug Analysis variant. |
 | `feature-test-planning.md` | Stage 1 Planning at feature / multi-story level — building a feature test plan, risk triage rubric, scenario decomposition, and variable + test-data identification. |
 | `exploration-patterns.md` | Stage 2 Execution — smoke-test Go/No-Go playbook, UI exploration on `{{WEB_URL}}`, API exploration on `{{API_URL}}`, DB cross-validation via `{{DB_MCP}}`, evidence naming + capture rules, edge-case checklist. |
@@ -402,12 +462,14 @@ All references are self-contained. Load one at a time.
 - **S7.** NEVER skip the smoke pass before triforce (UI / API / DB) exploration. Smoke validates the environment; triforce validates the feature. Order matters — a broken env produces false-positive bug reports.
 - **S8.** NEVER mix UI + API + DB findings into a single bug ticket. File per layer (or per root-cause cluster) so triage and routing stay clean.
 - **S9.** NEVER reuse a PBI folder across tickets. Every Story or Bug gets its own `.context/PBI/epics/EPIC-<KEY>-<slug>/stories/STORY-<KEY>-<slug>/` directory; cross-ticket contamination breaks evidence + traceability.
-- **S10.** NEVER transition the ticket Ready For QA → In Testing without explaining the story to the user AND waiting for confirmation (CLAUDE.md §8 — Session Start is not a one-shot, it's a hand-off gate).
+- **S10.** NEVER transition the ticket Ready For QA → In Test without explaining the story to the user AND waiting for confirmation (CLAUDE.md §8 — Session Start is not a one-shot, it's a hand-off gate).
 - **S11.** NEVER skip the auto-stage promote (Session Start → Stage 1 → Stage 2 → Stage 3) after a phase completes — each promote is a checkpoint that writes a `progress.md` entry and feeds the next subagent's Context docs.
 - **S12.** NEVER file a bug without a reproducible repro path AND evidence (screenshot, trace, log, network HAR, or DB row reference). "It failed for me once" is not a bug ticket.
 - **S13.** NEVER hardcode `customfield_NNNNN` IDs in ATP / ATR / QA comments or in any reference under this skill. Resolve every Jira field via `{{jira.<slug>}}` against `.agents/jira-required.yaml`.
-- **S14.** NEVER hand-write a Jira-mirrored `.md` in the PBI folder (`story.md`, `acceptance-criteria.md`, `acceptance-test-plan.md`, `acceptance-test-results.md`, `comments.md`, `feature-test-plan.md`, etc.). To SET their content: author it → write to the Jira custom field via `[ISSUE_TRACKER_TOOL]` (or, when the field is absent, a structured comment per `.agents/jira-required.yaml` `fallback:`) → run `bun run jira:sync-issues get <KEY> --include-comments` → READ the materialized file. Only `context.md`, `test-session-memory.md`, `module-context.md`, and `evidence/` are hand-authored locally.
+- **S14.** NEVER hand-write a Jira-mirrored `.md` in the PBI folder (`story.md`, `acceptance-criteria.md`, `acceptance-test-plan.md`, `acceptance-test-results.md`, `comments.md`, `feature-test-plan.md`, `module-context.md`, `test-cases/`, etc.). To SET their content: author it → write to the Jira custom field via `[ISSUE_TRACKER_TOOL]` (or, when the field is absent, a structured comment per `.agents/jira-required.yaml` `fallback:`; `module-context.md` goes to the `## Module Context (QA)` section of the Epic description) → run `bun run jira:sync-issues get <KEY> --include-comments` → READ the materialized file. The whole PBI tree is gitignored, so a hand-written file there is invisible to every other machine. Only `context.md` and `evidence/` are hand-authored inside PBI (local-only by design); `test-session-memory.md` is hand-authored under `.session/sprint-testing/<scope>/`.
 - **S15.** NEVER bury a hard-to-reverse test-architecture decision in a ticket plan. If Stage 1 planning forces a decision that is architectural AND hard to reverse (test-data-isolation contract, auth-in-tests change, fixture topology, flake-retry policy spanning 3+ tests or 2+ tickets), promote it to `.context/ADR/ADR-NNNN-<slug>.md` (append-only; supersede, never edit) and leave a `See ADR-NNNN` backlink in the plan's `## Technical Decisions`. Ticket-local trade-offs stay in the plan. AI drafts `Proposed`; the human approves. See `agentic-qa-core/references/adr-doctrine.md` §1–§2.
+- **S16.** NEVER create an ATR / retest Execution without a Test Environment. The environment resolves from `active_env` in `.agents/project.yaml` (or the session env switch) and is set at creation time. An environment-less Execution fails the Stage-1 DoD gate (`agentic-qa-core/references/stage-gates.md`) — no ATR without environment.
+- **S17.** NEVER maintain the ATS's, the ATP's, and the ATR's test lists as independent id lists (Modality jira-xray). The ATS membership is the single source; the Plan and the Execution DERIVE their lists from it. Three hand-maintained lists drift silently and corrupt coverage.
 
 ---
 
@@ -418,10 +480,12 @@ All references are self-contained. Load one at a time.
 - [ ] Session Start complete, user confirmed the story explanation
 - [ ] `.session/sprint-testing/<scope>/plan.md` written (per `session-management.md` §6 schema)
 - [ ] Project-wide context files present (if missing, hand off to `project-discovery`)
-- [ ] PBI folder + `context.md` + `test-session-memory.md` created
+- [ ] PBI folder + `context.md` created · session dir + `test-session-memory.md` created
 - [ ] `.env` credentials loaded (no hardcoded passwords)
 - [ ] Bug path: veto table evaluated BEFORE risk score
-- [ ] Stage 1 artifacts created with full traceability, verified via `[TMS_TOOL] trace`
+- [ ] Sprint STP found-or-created (first ticket) / updated (Session Start §0.7; skip note if the work type is absent)
+- [ ] Stage 1 artifacts created with full traceability, verified via `[TMS_TOOL] trace` — jira-xray: Set-first order honored (ATP item from the field · ATS with ALL TCs linked to the Story via the `test` slug · Plan/Exec lists derived from the ATS membership)
+- [ ] ATR / retest Execution carries the Test Environment (`active_env`) — no environment, no ATR (S16)
 - [ ] Stage 2 smoke test executed FIRST, Go/No-Go recorded
 - [ ] Evidence captured under the ticket's `evidence/` folder
 - [ ] Stage 3 ATR filled + QA comment posted + ticket transitioned

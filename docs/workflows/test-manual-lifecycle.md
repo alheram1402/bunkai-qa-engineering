@@ -27,8 +27,8 @@ El trabajo se reparte en dos skills complementarios:
 │                 UI/API/DB)    comment)       (TMS artifacts)     │
 │                                                                  │
 │   ┌───────┐    ┌───────┐     ┌───────┐      ┌───────┐           │
-│   │  ATP  │ →  │  FTX  │  →  │  ATR  │   →  │  TMS  │           │
-│   │ Plan  │    │Execute│     │Report │      │ + ROI │           │
+│   │  ATP  │ →  │ Story │  →  │  ATR  │   →  │  TMS  │           │
+│   │ Plan  │    │Testing│     │Report │      │ + ROI │           │
 │   └───────┘    └───────┘     └───────┘      └───────┘           │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -47,13 +47,13 @@ Verify the fix for bug UPEX-456.
 Run QA on this sprint's tickets.
 ```
 
-El skill crea el PBI folder (`.context/PBI/epics/EPIC-<KEY>-<slug>/stories/STORY-<KEY>-<slug>/`) con `context.md`, `test-session-memory.md` y `evidence/`, explica la historia y **espera tu confirmación** antes de continuar.
+El skill crea el PBI folder (`.context/PBI/epics/EPIC-<KEY>-<slug>/stories/STORY-<KEY>-<slug>/`) con `context.md` y `evidence/`, mas `test-session-memory.md` en `.session/sprint-testing/<scope>/`, explica la historia y **espera tu confirmación** antes de continuar.
 
 ---
 
 ### Pre-sprint Shift-Left (Stage 0)
 
-> **Pre-requisito ideal**: si la story pasó por `/shift-left-testing` ANTES del sprint planning, gran parte del trabajo de Planning ya está hecho. El skill habrá refinado los ACs, surfaceado gaps + ambigüedades, y dejado un ATP DRAFT en Jira con label `shift-left-reviewed`. Stage 1 de `/sprint-testing` detecta esa label (<30 días) y short-circuitea las Phases 1-3 — solo valida que los ACs siguen vigentes y continúa con parametrización + test-data.
+> **Pre-requisito ideal**: si la story pasó por `/shift-left-testing` ANTES del sprint planning, gran parte del trabajo de Planning ya está hecho. El skill habrá refinado los ACs, surfaceado gaps + ambigüedades, y dejado el ATP pre-sprint (madurez outline) escrito en el custom field `{{jira.acceptance_test_plan}}` con label `shift-left-reviewed` — el Test Plan item lo crea `/sprint-testing` Stage 1 a partir de ese field. Stage 1 de `/sprint-testing` detecta esa label (<30 días) y short-circuitea las Phases 1-3 — solo valida que los ACs siguen vigentes y continúa con parametrización + test-data.
 >
 > Cuando NO hubo Shift-Left, el flujo Planning de abajo corre completo in-sprint (más caro, pero perfectamente válido).
 
@@ -157,7 +157,7 @@ Cerrar el ciclo con un reporte formal y traceabilidad completa.
 
 1. **Completa el Acceptance Test Results (ATR)** en el TMS con resultados por TC.
 2. **Emite el QA comment** en la ticket (Template PASSED / FAILED) vía `[ISSUE_TRACKER_TOOL]`.
-3. **Transiciona el ticket** (`Tested`, `Ready for Release`, etc.).
+3. **Transiciona el ticket** (`In Test` → `QA Approved` → `Ready For Release`, etc. — nombres exactos en `.agents/jira-workflows.json`, la fuente autoritativa de estados y transiciones).
 4. El ATR se **materializa desde Jira** vía el sync como `acceptance-test-results.md` (cache read-only; nunca se escribe a mano un mirror local).
 
 Tras Reporting, el skill identifica el handoff: para documentación formal + ROI, carga `/test-documentation`.

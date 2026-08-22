@@ -172,7 +172,7 @@ ORCHESTRATOR                           SUB-AGENTS
     |-> Read SPRINT-{N}-TESTING.md
     |-> Pick next ticket (see STEP 1)
     |
-    |-> Dispatch SESSION START ------> Creates PBI + context.md + test-session-memory.md
+    |-> Dispatch SESSION START ------> Creates PBI + context.md · session dir + test-session-memory.md
     |-> Present Story Explanation, WAIT for user OK
     |
     |-> Dispatch PLANNING ----------> Updates memory (artifacts, test data)
@@ -211,9 +211,16 @@ Once chosen: note ID / type / title / priority, check for an existing `test-sess
 
 ## Sub-agent prompt templates
 
-Every dispatch uses the **6-component briefing format** defined in `.claude/skills/agentic-qa-core/references/briefing-template.md` (Goal / Context docs / Skills to load / Exact instructions / Report format / Rules). The four briefings below cover the per-ticket cadence (Session Start -> Stage 1 -> Stage 2 -> Stage 3) and are used VERBATIM in BOTH single-ticket and batch modes — single-ticket runs them once, batch loops them per Wave 1 PENDING ticket. Detailed step instructions live in the stage-specific reference — do NOT duplicate them here.
+Every dispatch uses the **7-component briefing format** defined in `.claude/skills/agentic-qa-core/references/briefing-template.md` (Goal / Context docs / Project Standards (auto-resolved) / Skills to load / Exact instructions / Report format / Rules). The four briefings below cover the per-ticket cadence (Session Start -> Stage 1 -> Stage 2 -> Stage 3) and are used VERBATIM in BOTH single-ticket and batch modes — single-ticket runs them once, batch loops them per Wave 1 PENDING ticket. Detailed step instructions live in the stage-specific reference — do NOT duplicate them here.
 
-> **Variable resolution**: `<TICKET_KEY>`, `<EPIC_KEY>`, `<EPIC_SLUG>`, `<STORY_SLUG>`, `<PBI_FOLDER>`, `<ENV>` are session variables filled by the orchestrator before dispatch. `<PBI_FOLDER>` resolves to `.context/PBI/epics/EPIC-<EPIC_KEY>-<EPIC_SLUG>/stories/STORY-<TICKET_KEY>-<STORY_SLUG>/` (absolute path; module = Epic, 1:1). `{{PROJECT_KEY}}`, `{{WEB_URL}}`, `{{API_URL}}`, `{{API_MCP}}`, `{{DB_MCP}}` resolve from `.agents/project.yaml` per `CLAUDE.md` §"Project Variables".
+> **Variable resolution**: `<TICKET_KEY>`, `<EPIC_KEY>`, `<EPIC_SLUG>`, `<STORY_SLUG>`, `<PBI_FOLDER>`, `<SESSION_DIR>`, `<ENV>` are session variables filled by the orchestrator before dispatch. `{{PROJECT_KEY}}`, `{{WEB_URL}}`, `{{API_URL}}`, `{{API_MCP}}`, `{{DB_MCP}}` resolve from `.agents/project.yaml` per `CLAUDE.md` §"Project Variables".
+>
+> | Variable | Resolves to | Holds |
+> |---|---|---|
+> | `<PBI_FOLDER>` | `.context/PBI/epics/EPIC-<EPIC_KEY>-<EPIC_SLUG>/stories/STORY-<TICKET_KEY>-<STORY_SLUG>/` (module = Epic, 1:1) | The Jira cache for this ticket, plus local-only `context.md` and `evidence/`. Regenerable with `bun run jira:sync-issues`. |
+> | `<SESSION_DIR>` | `.session/sprint-testing/<scope>/` where `<scope>` is `<TICKET_KEY>` (single) or `sprint-<N>/<TICKET_KEY>` (batch) | Session state: `plan.md`, `progress.md`, and `test-session-memory.md`. |
+>
+> Both are absolute paths. They are separate on purpose: `<PBI_FOLDER>` is a cache that a re-sync overwrites wholesale, so anything a resume depends on must live in `<SESSION_DIR>` instead.
 
 > **Environment override**: every briefing resolves `{{WEB_URL}}` / `{{API_URL}}` through `test-session-memory.md` §Environment FIRST. If `WEB_URL_OVERRIDE` / `API_URL_OVERRIDE` is set there (not `none`), use it instead of the `project.yaml` active-env value — this is a session-only ad-hoc URL (broken staging, ephemeral preview deploy, hotfix branch) authorized by the user. It is NEVER written to `.agents/project.yaml`. This is distinct from `active_env` switching (which picks a *named* env from `project.yaml`). The override is recorded once at Session Start and read automatically by all four dispatches — do not re-thread it per briefing.
 
@@ -227,13 +234,13 @@ Every dispatch uses the **6-component briefing format** defined in `.claude/skil
 Goal: Fetch ticket <TICKET_KEY> from the issue tracker, load relevant context, create the PBI folder, and return a session-start report.
 
 Context docs:
-  - /home/sai/Desktop/upex/web-apps/agentic-qa-boilerplate/CLAUDE.md (§"Local Context (PBI)" folder convention)
-  - /home/sai/Desktop/upex/web-apps/agentic-qa-boilerplate/.context/master-test-plan.md
-  - /home/sai/Desktop/upex/web-apps/agentic-qa-boilerplate/.context/business/business-data-map.md
-  - /home/sai/Desktop/upex/web-apps/agentic-qa-boilerplate/.context/business/business-feature-map.md
-  - /home/sai/Desktop/upex/web-apps/agentic-qa-boilerplate/.context/business/business-api-map.md
-  - /home/sai/Desktop/upex/web-apps/agentic-qa-boilerplate/.claude/skills/sprint-testing/references/session-entry-points.md
-  - /home/sai/Desktop/upex/web-apps/agentic-qa-boilerplate/.agents/project.yaml (project metadata + active env)
+  - <<REPO_ROOT>>/CLAUDE.md (§"Local Context (PBI)" folder convention)
+  - <<REPO_ROOT>>/.context/master-test-plan.md
+  - <<REPO_ROOT>>/.context/business/business-data-map.md
+  - <<REPO_ROOT>>/.context/business/business-feature-map.md
+  - <<REPO_ROOT>>/.context/business/business-api-map.md
+  - <<REPO_ROOT>>/.claude/skills/sprint-testing/references/session-entry-points.md
+  - <<REPO_ROOT>>/.agents/project.yaml (project metadata + active env)
 
 Skills to load: none required for the read (detailed fetch uses bun run jira:sync-issues, not /acli)
 
@@ -241,11 +248,14 @@ Exact instructions:
   1. Fetch detail: `bun run jira:sync-issues get <TICKET_KEY> --include-comments`, then read the synced `.md` files (story.md, acceptance-criteria.md, comments.md, etc.) to capture: type, summary, AC list, status, components, fix-version, comments. NEVER `acli workitem view` for custom fields.
   2. Determine <EPIC_KEY> / <EPIC_SLUG> (module = Epic, 1:1) from the parent epic + components/labels per session-entry-points.md §"Step 4 — Module context".
   3. Generate <STORY_SLUG> (max 5 words, kebab-case) from the ticket summary.
-  4. Create <PBI_FOLDER> = .context/PBI/epics/EPIC-<EPIC_KEY>-<EPIC_SLUG>/stories/STORY-<TICKET_KEY>-<STORY_SLUG>/ with the HAND-AUTHORED (NON-Jira) files only:
+  4. Create <PBI_FOLDER> with the HAND-AUTHORED (NON-Jira) files only:
        - context.md (session notes + "Open questions" section, populated per session-entry-points.md §"Step 7")
-       - test-session-memory.md (template from this reference §"test-session-memory.md template")
        - evidence/ (empty directory)
      Jira-mirrored files (story.md, acceptance-criteria.md, acceptance-test-plan.md, comments.md, ...) are materialized by the sync in Step 1 — never hand-write them.
+     Create <SESSION_DIR> with:
+       - test-session-memory.md (template from this reference §"test-session-memory.md template")
+     It belongs in <SESSION_DIR>, NOT in <PBI_FOLDER>: a re-sync overwrites the PBI cache
+     wholesale, and this file is the payload every resume and every sub-agent reads.
   5. Extract Team Discussion from the synced comments.md per session-entry-points.md §"Step 1b" rules.
   6. For Bug tickets: include the bug-specific fields (steps to reproduce, expected vs actual) in context.md.
   7. Write the Story Explanation into test-session-memory.md (the orchestrator presents it to the user).
@@ -257,7 +267,7 @@ Report format:
     "epic_key": "<EPIC_KEY>",
     "epic_slug": "<EPIC_SLUG>",
     "pbi_folder": "<absolute path>",
-    "memory_path": "<PBI_FOLDER>/test-session-memory.md",
+    "memory_path": "<SESSION_DIR>/test-session-memory.md",
     "ac_count": <int>,
     "open_questions": [...],
     "ticket_summary": "...",
@@ -282,11 +292,11 @@ Goal: Produce ATP, risk-triage, and draft TCs for <TICKET_KEY> in <PBI_FOLDER>; 
 
 Context docs:
   - <PBI_FOLDER>/context.md (output of Session Start)
-  - <PBI_FOLDER>/test-session-memory.md (READ FIRST — shared memory)
-  - /home/sai/Desktop/upex/web-apps/agentic-qa-boilerplate/.claude/skills/sprint-testing/references/acceptance-test-planning.md
-  - /home/sai/Desktop/upex/web-apps/agentic-qa-boilerplate/.context/business/business-feature-map.md
-  - /home/sai/Desktop/upex/web-apps/agentic-qa-boilerplate/.context/business/business-api-map.md (if API-affecting)
-  - /home/sai/Desktop/upex/web-apps/agentic-qa-boilerplate/.context/PBI/epics/EPIC-<EPIC_KEY>-<EPIC_SLUG>/module-context.md (if it exists)
+  - <SESSION_DIR>/test-session-memory.md (READ FIRST — shared memory)
+  - <<REPO_ROOT>>/.claude/skills/sprint-testing/references/acceptance-test-planning.md
+  - <<REPO_ROOT>>/.context/business/business-feature-map.md
+  - <<REPO_ROOT>>/.context/business/business-api-map.md (if API-affecting)
+  - <<REPO_ROOT>>/.context/PBI/epics/EPIC-<EPIC_KEY>-<EPIC_SLUG>/module-context.md (if it exists)
 
 Skills to load: /acli (for ATP/ATR WRITE + Story link); in Modality jira-xray also /xray-cli (for [TMS_TOOL] Test Plan / Test Execution issues). Detailed reads (ACs, parent feature plan) use bun run jira:sync-issues, not /acli.
 
@@ -295,19 +305,26 @@ Exact instructions:
   2. Risk triage per acceptance-test-planning.md §"0.2 Risk score" (impact x likelihood -> P0|P1|P2 distribution).
   3. Translate ACs into ATP rows (one row per testable behavior); apply Phases 1-4 of acceptance-test-planning.md (Critical Analysis, Story Quality, Refined ACs, Test Outlines).
   4. Draft TC outlines (summary + steps + expected) — full TC bodies are formalized in Stage 4 (test-documentation), not here.
-  5. Create ATP + ATR per the modality branch in acceptance-test-planning.md §"Phase 6 — Traceability + Ticket updates":
-       - Modality jira-xray: [TMS_TOOL] Create TestPlan + Create Execution; link to Story via [ISSUE_TRACKER_TOOL] Link Issues.
+  5. Create ATP + ATS + ATR per the modality branch in acceptance-test-planning.md §"Phase 6 — Traceability + Ticket updates":
+       - Modality jira-xray — Set-first order (AUTHORITATIVE):
+           ① [TMS_TOOL] Find-or-create TestPlan `ATP: <TICKET_KEY>: {title}` (parent QA Master Test Plan) FROM the {{jira.acceptance_test_plan}} field content the shift-left pass left (pre-sprint the ATP lives ONLY in the field; author fresh — item + field — when the field is empty).
+           ② Create the sprint Test issues per the TC-timing rule, then [TMS_TOOL] Find-or-create TestSet `ATS: <TICKET_KEY>: {title}` (parent QA Test Artifacts, components inherited from the Story — mandatory) holding ALL of them (Xray-internal membership, never issue links); link ATS→Story via the `test` slug — THE coverage link (fills the Xray coverage panel).
+           ③ Derive the ATP's and the ATR Execution's test lists FROM the ATS membership — never three independent id lists.
+           ④ [TMS_TOOL] Create Execution `ATR: <TICKET_KEY>: Story Testing` (parent QA Test Artifacts) ALWAYS carrying the Test Environment from `active_env` in .agents/project.yaml (or the session env switch) — NO ATR without environment (hard gate: agentic-qa-core/references/stage-gates.md §Stage 1).
+           ATP→Story / ATR→Story links stay administrative ([ISSUE_TRACKER_TOOL] Link Issues; zero coverage).
        - Modality jira-native: [ISSUE_TRACKER_TOOL] Update Issue with {{jira.acceptance_test_plan}} field (or `## Acceptance Test Plan (ATP)` fallback comment when the field is absent).
   6. Materialize the local cache per modality (read-only cache; never hand-write it), then read it back to confirm:
        - Modality jira-native: `bun run jira:sync-issues get <TICKET_KEY> --include-comments` -> <PBI_FOLDER>/acceptance-test-plan.md
        - Modality jira-xray: `bun run jira:sync-issues get <ATP_KEY>` -> .context/PBI/test-plans/TESTPLAN-<ATP_KEY>-<slug>.md (the Test Plan issue; its description holds the ATP body)
-  7. Update <PBI_FOLDER>/test-session-memory.md sections: TMS Artifacts, Test Data, Stage Results > Planning, Checklist > Planning.
+  7. Update <SESSION_DIR>/test-session-memory.md sections: TMS Artifacts, Test Data, Stage Results > Planning, Checklist > Planning.
 
 Report format:
   {
     "atp_path": "<PBI_FOLDER>/acceptance-test-plan.md (jira-native) | .context/PBI/test-plans/TESTPLAN-<ATP_KEY>-<slug>.md (jira-xray)",
     "atp_id": "<TMS issue key | story-field>",
+    "ats_id": "<TMS issue key | null (jira-native without Test Set work type)>",
     "atr_id": "<TMS issue key | story-field>",
+    "atr_environment": "<active_env value set on the Execution — MANDATORY in jira-xray>",
     "atc_drafts": [{ "title": "...", "type": "Positive|Negative|Boundary|Edge", "priority": "P0|P1|P2" }],
     "risk_distribution": { "P0": <int>, "P1": <int>, "P2": <int> },
     "veto_outcome": "proceed | skip | require | escalate",
@@ -318,7 +335,8 @@ Report format:
 
 Rules:
   - Do NOT execute any test (Stage 2 owns execution).
-  - Do NOT create formal TMS Test entities (Stage 4 / test-documentation owns that).
+  - TC timing is modality-aware (SKILL.md §"TC creation timing"): Modality jira-native → outlines only, NO `Test` work items (Stage 4 / test-documentation owns that); Modality jira-xray → create the sprint Test issues + the ATS per the Set-first order (persistent regression promotion still belongs to Stage 4).
+  - NEVER create the ATR without its Test Environment (`active_env`) — an environment-less Execution fails the Stage-1 DoD gate.
   - Critical Rule #2 (Plan Before Coding): outputs are plans + outlines, no test code.
   - Surface open_questions to the orchestrator instead of guessing AC behavior.
   - Source order: Jira field (or `## Acceptance Test Plan (ATP)` fallback comment) is canonical; <PBI_FOLDER>/acceptance-test-plan.md is a read-only cache emitted by bun run jira:sync-issues — never hand-written.
@@ -331,13 +349,13 @@ Goal: Run smoke pass + triforce exploration (UI / API / DB) for <TICKET_KEY> aga
 
 Context docs:
   - <PBI_FOLDER>/acceptance-test-plan.md (the ATP from Stage 1 — Jira-synced cache; Modality jira-xray: .context/PBI/test-plans/TESTPLAN-<ATP_KEY>-<slug>.md)
-  - <PBI_FOLDER>/test-session-memory.md (READ FIRST — shared memory)
+  - <SESSION_DIR>/test-session-memory.md (READ FIRST — shared memory)
   - <PBI_FOLDER>/context.md
-  - /home/sai/Desktop/upex/web-apps/agentic-qa-boilerplate/.claude/skills/sprint-testing/references/exploration-patterns.md
-  - /home/sai/Desktop/upex/web-apps/agentic-qa-boilerplate/.agents/project.yaml (active env URLs and MCP names)
-  - /home/sai/Desktop/upex/web-apps/agentic-qa-boilerplate/.context/business/business-data-map.md (entity flows for DB exploration)
+  - <<REPO_ROOT>>/.claude/skills/sprint-testing/references/exploration-patterns.md
+  - <<REPO_ROOT>>/.agents/project.yaml (active env URLs and MCP names)
+  - <<REPO_ROOT>>/.context/business/business-data-map.md (entity flows for DB exploration)
 
-Skills to load: /playwright-cli (UI exploration); the active environment's API and DB MCPs ({{API_MCP}} and {{DB_MCP}} from project.yaml). For Bug tickets: same set, no extras.
+Skills to load: /playwright-cli (UI exploration); the active environment's API and DB MCPs ({{API_MCP}} and {{DB_MCP}} from project.yaml). For Bug tickets in Modality jira-xray: also /xray-cli (repro-Test creation at fix-verification time, step 7) + /acli (the Bug↔Test link).
 
 Exact instructions:
   1. Mark the ticket as actively testing (substrate-driven, idempotent, non-blocking). Resolve `{{jira.transition.<work_type>.start_testing}}` and `{{jira.status.<work_type>.in_test}}` from `.agents/jira-workflows.json` (per CLAUDE.md §"Project Variables"). Call `[ISSUE_TRACKER_TOOL] Get Transitions` for `<TICKET_KEY>`. Skip (and emit `skipped_reason`) if any of these hold:
@@ -351,10 +369,10 @@ Exact instructions:
   4. Triforce UI: explore edge cases, empty states, validation errors per exploration-patterns.md §1.
   5. Triforce API: hit the relevant endpoints with valid + invalid + boundary payloads via the API MCP per exploration-patterns.md §2.
   6. Triforce DB: verify state changes via the DB MCP for write-side ATCs per exploration-patterns.md §3.
-  7. Bug branch: replace steps 4-6 with reproduce-original -> verify-fix -> regression-pass on adjacent areas -> DB cross-validation if data-integrity bug (per session-entry-points.md §"Bug workflow Phase 2").
+  7. Bug branch: replace steps 4-6 with reproduce-original -> verify-fix -> (Modality jira-xray) create the repro `Test` NOW, at fix-verification time — ONE by default, 1:N only if the scope genuinely covers distinct conditions — link it Bug↔Test via the `test` slug, add it to the retest Execution and record its run PASSED/FAILED -> regression-pass on adjacent areas -> DB cross-validation if data-integrity bug (per session-entry-points.md §"Bug workflow Phase 2").
   8. Capture evidence (screenshots, traces, response samples) under <PBI_FOLDER>/evidence/ using the naming rule from exploration-patterns.md.
   9. For each defect found: build a BUG_FOUND entry with severity, repro steps, evidence paths, and classify it `blocking` vs `non-blocking` per the "Finding triage" table in exploration-patterns.md. A FAIL is not auto-Critical — assign severity per reporting-templates.md §1.4. Graduated handling: a **blocking** finding (smoke/env down, data integrity, security-exploitable) STOPS the pass — emit it and stop. A **non-blocking** finding is logged and you CONTINUE the pass to completion; report all non-blocking findings together (do not stop the pass for them).
-  10. Update <PBI_FOLDER>/test-session-memory.md sections: Stage Results > Execution, Bugs Found, Observations, Checklist > Execution.
+  10. Update <SESSION_DIR>/test-session-memory.md sections: Stage Results > Execution, Bugs Found, Observations, Checklist > Execution.
 
 Report format:
   {
@@ -386,11 +404,11 @@ Goal: Fill the ATR, post the QA comment, transition the issue, and file bug repo
 
 Context docs:
   - <PBI_FOLDER>/acceptance-test-plan.md (ATP — Jira-synced cache; Modality jira-xray: .context/PBI/test-plans/TESTPLAN-<ATP_KEY>-<slug>.md)
-  - <PBI_FOLDER>/test-session-memory.md (READ FIRST — shared memory; contains Stage 2 results)
+  - <SESSION_DIR>/test-session-memory.md (READ FIRST — shared memory; contains Stage 2 results)
   - <PBI_FOLDER>/evidence/ (Stage 2 evidence)
   - <PBI_FOLDER>/context.md (ticket summary)
-  - /home/sai/Desktop/upex/web-apps/agentic-qa-boilerplate/.claude/skills/sprint-testing/references/reporting-templates.md
-  - /home/sai/Desktop/upex/web-apps/agentic-qa-boilerplate/.agents/jira-fields.json (custom field IDs for ATR/ATP — Modality jira-native only)
+  - <<REPO_ROOT>>/.claude/skills/sprint-testing/references/reporting-templates.md
+  - <<REPO_ROOT>>/.agents/jira-fields.json (custom field IDs for ATR/ATP — Modality jira-native only)
 
 Skills to load: /acli (issue updates + comments + transitions + bug creation); in Modality jira-xray also /xray-cli (only when ATR is an Xray Test Execution and Test Run statuses must be updated).
 
@@ -421,7 +439,7 @@ Exact instructions:
        e. **QA Assignee** = self (the authenticated session user); NEVER overwrite an existing owner (read-before-write). Distinct from the native dev `assignee` (Part 2).
        f. **Parent** the issue to the **QA Defect Management** process epic (`qa.qa_epics.defect_epic`, found-or-created — NEVER the Story and NEVER a product/dev epic), and KEEP the **source-Story link** for traceability (Story `causes` the issue via `{{jira.link_types.problem_incident.name}}`, per reporting-templates.md §1.13). Three axes: parent = QA epic · link = Story · components = product module (Part 4).
      Create-time customfields + native `components` go via acli `workitem create --from-json`; customfield/component edits on an existing issue go via REST `PUT` — mechanics in doctrine Part 6 + `/acli`.
-  7. Update <PBI_FOLDER>/test-session-memory.md sections: TMS Artifacts (final IDs), Stage Results > Reporting, Checklist > Reporting.
+  7. Update <SESSION_DIR>/test-session-memory.md sections: TMS Artifacts (final IDs), Stage Results > Reporting, Checklist > Reporting.
 
 Report format:
   {
@@ -466,7 +484,7 @@ IMPORTANT: credentials always from .env. Never hardcode. Never ask the user for
 
 ## test-session-memory.md template
 
-Created at `.context/PBI/epics/EPIC-<KEY>-<slug>/stories/STORY-{{PROJECT_KEY}}-{number}-{brief-title}/test-session-memory.md`. Hand-authored (NON-Jira) shared memory across sub-agents.
+Created at `<SESSION_DIR>/test-session-memory.md` — i.e. `.session/sprint-testing/<TICKET_KEY>/test-session-memory.md`, or `.session/sprint-testing/sprint-<N>/<TICKET_KEY>/test-session-memory.md` in batch mode. Hand-authored (NON-Jira) shared memory across sub-agents; gitignored with the rest of `.session/`.
 
 ```markdown
 # Test Session Memory: {{PROJECT_KEY}}-{number}
@@ -508,8 +526,10 @@ Created at `.context/PBI/epics/EPIC-<KEY>-<slug>/stories/STORY-{{PROJECT_KEY}}-{
 | Type | ID | Name | Status |
 |------|----|------|--------|
 | ATP  | -  | -    | -      |
-| ATR  | -  | -    | -      |
+| ATS  | -  | -    | -      |
+| ATR  | -  | -    | -      | <!-- record the Test Environment (active_env) set at creation -->
 | TC   | -  | -    | -      |
+| STP  | -  | -    | -      | <!-- sprint-level, shared across tickets (Session Start §0.7) -->
 
 ## Paths
 - PBI: .context/PBI/epics/EPIC-<KEY>-<slug>/stories/STORY-{{PROJECT_KEY}}-{number}-{brief-title}/
@@ -553,14 +573,17 @@ Created at `.context/PBI/epics/EPIC-<KEY>-<slug>/stories/STORY-{{PROJECT_KEY}}-{
 - [ ] Module context loaded or created
 - [ ] Code explored (backend + frontend as applicable)
 - [ ] Test data candidates identified
-- [ ] PBI folder + context.md + test-session-memory.md created
+- [ ] PBI folder + context.md · session dir + test-session-memory.md created
 - [ ] Story Explanation written
 - [ ] Playwright config set (if UI test)
 
 ### Planning (Feature)
 - [ ] Triage completed (veto or risk score)
 - [ ] Test data discovered via DB
-- [ ] ATP + ATR created and linked to Story; ATP linked to ATR
+- [ ] ATP item find-or-created FROM the {{jira.acceptance_test_plan}} field (xray) / field written (native); ATP linked to ATR
+- [ ] [xray] ATS created/updated with ALL the Story's TCs; ATS→Story linked via the `test` slug (coverage link); components inherited
+- [ ] [xray] ATP + ATR test lists derived FROM the ATS membership (no independent id lists)
+- [ ] [xray] ATR created WITH the Test Environment (active_env) — no environment, no ATR
 - [ ] Test Analysis filled in ATP
 - [ ] AC Gaps written (or confirmed: none)
 - [ ] TCs created with full traceability
@@ -571,7 +594,8 @@ Created at `.context/PBI/epics/EPIC-<KEY>-<slug>/stories/STORY-{{PROJECT_KEY}}-{
 ### Planning (Bug)
 - [ ] Veto check completed
 - [ ] Bug Analysis written in ATP
-- [ ] ATP + ATR created and linked
+- [ ] ATP + ATR created and linked (retest Execution WITH Test Environment from active_env)
+- [ ] [xray] ONE repro Test planned by default (1:N only if the scope genuinely covers distinct conditions — test-design-doctrine); created at fix-verification time (Stage 2)
 - [ ] Test data discovered
 - [ ] ATP marked complete
 
@@ -606,6 +630,7 @@ After Sub-agent 4 finishes:
    - Change Status `PENDING` -> `PASSED` / `FAILED`.
    - Fill ATP / ATR / TCs columns.
    - Update the Stats section.
+3b. **Update the sprint STP** (`STP: Sprint#{N}: {objective}` — the Test Plan item find-or-created at Session Start §0.7): append this ticket's outcome to its scope/progress. The STP is a LIVING sprint planner — every tested ticket updates it. Skip with a note when the Test Plan work type is absent (no sprint-altitude field fallback); non-blocking.
 4. Present a per-ticket summary:
 
    ```
@@ -674,6 +699,12 @@ After the table:
 Session stats: {X} tickets tested, {Y} TCs executed, {Z}% pass rate
 Remaining queue: {list remaining PENDING tickets with priority}
 ```
+
+**Sprint close (last ticket of the sprint done, no PENDING left):**
+
+1. Find-or-create the sprint recap Execution `STR: Sprint#{N}: Regression Testing` — a **Test Execution**, parent **QA Test Artifacts**, ALWAYS with the Test Environment from `active_env` — IF `/regression-testing` has not already created it (whichever arrives first creates it; the other completes it). Fill it as the recap of the sprint's results.
+2. Close the sprint STP (`STP: Sprint#{N}: {objective}`): final scope/progress update + transition to its terminal state.
+3. Both steps skip with a note when the respective work type is absent (jira-native without Test Plan / Test Execution work types); non-blocking.
 
 ---
 

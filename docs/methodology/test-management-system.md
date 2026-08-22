@@ -18,7 +18,7 @@ IQL replaces the traditional STLC by integrating quality throughout the entire s
 │      ┌──────────────┐     ┌──────────────┐     ┌──────────────┐            │
 │      │  EARLY-GAME  │────▶│   MID-GAME   │────▶│  LATE-GAME   │            │
 │      │  Prevention  │     │  Detection   │     │ Observation  │            │
-│      │  Steps 1-4   │     │  Steps 5-10  │     │  Steps 11-16 │            │
+│      │  Steps 1-4   │     │  Steps 5-9   │     │  Steps 10-15 │            │
 │      └──────────────┘     └──────────────┘     └──────────────┘            │
 │             │                    │                    │                     │
 │             ▼                    ▼                    ▼                     │
@@ -65,7 +65,7 @@ IQL integrates 8 complementary approaches applied strategically across different
 
 ---
 
-## Part 2: The 16 Steps of IQL
+## Part 2: The 15 Steps of IQL
 
 ### Complete Timeline
 
@@ -77,7 +77,7 @@ IQL integrates 8 complementary approaches applied strategically across different
 
   Step 1: Requirements Analysis & Planning     [TMLC 1st Stage]
           • AC Review with PO/BA
-          • Create Feature Test Plan (FTP)
+          • Create the story's Acceptance Test Plan (ATP)
           • Define test outlines/hypotheses
 
   Step 2: Development & Implementation         [Parallel Work]
@@ -86,16 +86,17 @@ IQL integrates 8 complementary approaches applied strategically across different
 
   Step 3: Early Exploratory Testing            [TMLC 2nd Stage]
           • Execute directed exploratory tests
-          • Validate US using FTP as guide
-          • Provide fast feedback
+          • Validate US using the ATP as guide
+          • Log any bug found, with steps and evidence
+          • Provide fast feedback and sign off the US
 
-  Step 4: Defect Reporting                     [TMLC 3rd Stage]
-          • Log bugs with clear reproduction steps
-          • Include evidence (screenshots, logs)
-          • Sign-off US once critical bugs resolved
+  Step 4: Risk-Based Prioritization            [TMLC 3rd Stage]
+          • Assess impact and probability per ATP scenario
+          • Select high-value scenarios to become Test Cases
+          • Record decisions in the Test Repository
 
 ══════════════════════════════════════════════════════════════════════════════
-  MID-GAME (Steps 5-10)               "Does the software meet the requirements?"
+  MID-GAME (Steps 5-9)                "Does the software meet the requirements?"
   DETECTION - QA Automation Leads     TMLC Stage 4 + TALC Stages 1-4
 ══════════════════════════════════════════════════════════════════════════════
 
@@ -124,42 +125,38 @@ IQL integrates 8 complementary approaches applied strategically across different
           • Code review by another QA/Dev
           • Merge once approved
 
-  Step 10: Continuous Maintenance              [TMLC + TALC Combined]
-           • Run regression (manual + automated)
-           • Smoke/sanity in staging
-           • Remove obsolete tests
-
 ══════════════════════════════════════════════════════════════════════════════
-  LATE-GAME (Steps 11-16)             "How does it behave in the real world?"
+  LATE-GAME (Steps 10-15)             "How does it behave in the real world?"
   OBSERVATION - QA + DevOps/SRE       Shift-Right Testing
 ══════════════════════════════════════════════════════════════════════════════
 
-  Step 11: Production Deployment & Smoke       [Shift-Right]
-           • Smoke/sanity tests in production
-           • Validate critical functionalities
-           • Monitor system health
+  Step 10: Continuous Maintenance & Monitoring [TMLC + TALC Combined]
+           • Run regression (manual + automated)
+           • Smoke/sanity in staging and in production
+           • Validate critical functionalities post-deploy
+           • Log urgent issues and remove obsolete tests
 
-  Step 12: Canary Release Monitoring           [Gradual Rollout]
+  Step 11: Canary Release Monitoring           [Gradual Rollout]
            • Deploy to small % of users
            • Monitor key metrics
            • Decide rollback or expand
 
-  Step 13: A/B Testing & Experimentation       [Optimization]
+  Step 12: A/B Testing & Experimentation       [Optimization]
            • Test feature variations
            • Collect user behavior data
            • Make data-driven decisions
 
-  Step 14: Real User Monitoring (RUM)          [Observability]
+  Step 13: Real User Monitoring (RUM)          [Observability]
            • Monitor Core Web Vitals
            • Track performance by region/device
            • Alert on degradation
 
-  Step 15: Chaos Engineering                   [Resilience]
+  Step 14: Chaos Engineering                   [Resilience]
            • Introduce controlled failures
            • Validate system recovery
            • Document weaknesses
 
-  Step 16: Feedback Loop                       [Continuous Learning]
+  Step 15: Feedback Loop                       [Continuous Learning]
            • Collect production feedback
            • Analyze error patterns
            • Feed insights to next Early-Game
@@ -189,26 +186,28 @@ IQL integrates 8 complementary approaches applied strategically across different
 
 **Activities:**
 - Discuss ambiguities with PO/BA
-- Create Feature Test Plan (FTP)
+- Create the story's **Acceptance Test Plan (ATP)**
 - Define test outlines/hypotheses
 
-**Output:** Clear ACs validated + Feature Test Plan
+> **The FTP is NOT created here.** The Feature Test Plan is **one per feature/Epic** and is a living document refined across the whole epic; what a User Story produces is its **ATP**, which inherits the FTP's shared risks, integration points and personas. Canon: `.claude/skills/sprint-testing/references/feature-test-planning.md`.
+
+**Output:** Clear ACs validated + Acceptance Test Plan
 
 **Subtasks Workflow:**
 ```
 'QA: AC Review'         →  Open → In Progress → Done
-'QA: Feature Test Plan' →  Open → In Progress → Done
+'QA: Acceptance Test Plan' →  Open → In Progress → Done
 ```
 
-**⚠️ IMPORTANT: FTP = Hypotheses, NOT Formal Documentation**
+**⚠️ IMPORTANT: ATP = Hypotheses, NOT Formal Documentation**
 
-The scenarios in the Feature Test Plan are ASSUMPTIONS based on the Acceptance Criteria. During development, the feature may change due to:
+The scenarios in the Acceptance Test Plan are ASSUMPTIONS based on the Acceptance Criteria. During development, the feature may change due to:
 - QA feedback during exploratory testing
 - Bugs that alter expected behavior
 - Changes in acceptance criteria
 - UX/UI adjustments during implementation
 
-The FTP GUIDES exploration but does NOT automatically become formal Test Cases. Formal TCs are designed in Mid-Game after confirming actual behavior.
+The ATP GUIDES exploration but does NOT automatically become formal Test Cases. Formal TCs are designed in Mid-Game after confirming actual behavior.
 
 ### Step 2: Development & Implementation
 
@@ -216,32 +215,32 @@ The FTP GUIDES exploration but does NOT automatically become formal Test Cases. 
 
 While Dev implements the feature:
 - Dev: Creates branch, implements code, unit tests, deploys to staging
-- QA: Prepares test data, sets up environment, reviews FTP
+- QA: Prepares test data, sets up environment, reviews the ATP
 
 **Result:** Feature ready for testing
 
 ### Step 3: Early Exploratory Testing
 
-**TMLC Stage 2** - Fast validation using the Feature Test Plan
+**TMLC Stage 2** - Fast validation using the Acceptance Test Plan
 
 **Purpose:** Validate the User Story quickly before production deployment
 
 **Activities:**
 - Execute directed exploratory tests in critical/high-risk areas
-- Use charters or hypotheses from FTP to guide exploration
+- Use charters or hypotheses from the ATP to guide exploration
 - Report findings and defects immediately
 - Provide fast feedback to development
 
 **Subtask Workflow:**
 ```
-'QA: Feature Testing' →  Open → In Progress → Done
+'QA: Story Testing' →  Open → In Progress → Done
 ```
 
 **Result:** User Story can be deployed to production once QA approves
 
-### Step 4: Defect Reporting
+#### Defect Reporting (situational, inside this step)
 
-**TMLC Stage 3** - Document findings with clear, reproducible information
+Defect reporting is **not a step of its own**. It happens inside exploratory testing and only when there is something to report: a story that surfaces no defects skips it entirely. When there are findings, document them with clear, reproducible information.
 
 **Defect Report Template:**
 ```
@@ -272,7 +271,21 @@ LINKED USER STORY: US-XXX
 - User Story approved for production deployment
 - Behavior is confirmed and stable
 
-**→ TRANSITION TO MID-GAME:** Now that behavior is confirmed, it's time to document formal Test Cases for regression and automation.
+### Step 4: Risk-Based Prioritization
+
+**TMLC Stage 3** - Decide which ATP scenarios deserve formal Test Cases
+
+**Purpose:** Separate the scenarios worth documenting from the ones that stay exploratory
+
+**Activities:**
+- Assess potential impact and probability of defects for each ATP scenario
+- Select the high-value scenarios that will become formal Test Cases
+- Leave low-value scenarios as exploratory, with no formal documentation
+- Record the decisions in the Test Repository (Epic in Jira)
+
+**Output:** A refined list of scenarios ready to be written as scripted Test Cases
+
+**→ TRANSITION TO MID-GAME:** Behavior is confirmed and the scenarios worth keeping are selected; it's time to document formal Test Cases for regression and automation.
 
 ### Early-Game Key Concepts
 
@@ -284,7 +297,7 @@ LINKED USER STORY: US-XXX
 
 ---
 
-## Part 4: Mid-Game Testing (Steps 5-10)
+## Part 4: Mid-Game Testing (Steps 5-9)
 
 ### Philosophy: Detection
 
@@ -297,9 +310,9 @@ LINKED USER STORY: US-XXX
 ### The Two Life Cycles: TMLC and TALC
 
 **TMLC (Test Manual Life Cycle):**
-- Stage 1: AC Review + FTP (Early-Game, Step 1)
+- Stage 1: AC Review + ATP (Early-Game, Step 1)
 - Stage 2: Exploratory Testing (Early-Game, Step 3)
-- Stage 3: Defect Reporting (Early-Game, Step 4)
+- Stage 3: Risk-Based Prioritization (Early-Game, Step 4)
 - Stage 4: TC Documentation (Mid-Game, Step 5)
 
 **TALC (Test Automation Life Cycle):**
@@ -339,8 +352,9 @@ TEST DATA:
 
 **Status Workflow:**
 ```
-Draft → In Review → Active → [Manual | Candidate | Automated]
+Draft → In Design → READY → [MANUAL | In Review → Candidate → In Automation → Pull Request → AUTOMATED]
 ```
+(Full state machine + authoritative source: "Test Case Life Cycle" below. There is no `Active` status.)
 
 ### Step 6: Automation Candidate Evaluation
 
@@ -434,27 +448,17 @@ CODE PUSH → BUILD → TEST → REPORT
 
 **Status Transition:**
 ```
-In Automation → Merge Request → Automated
+In Automation --create PR--> Pull Request --merged--> AUTOMATED
 ```
+(Status and transition names per `.agents/jira-workflows.json`, `work_types.test_case` — the authoritative source. There is no `Merge Request` status.)
 
 **Result:** Tests are now part of the main regression suite
-
-### Step 10: Continuous Maintenance
-
-**TMLC + TALC Combined** - Keep the test suite healthy
-
-**Pre-Production Verification:**
-- Execute manual regression tests (TMLC)
-- Run full automated suite (TALC)
-- Smoke/Sanity in staging
-- Review and remove obsolete tests
-- Fix flaky tests
 
 **→ TRANSITION TO LATE-GAME:** With a stable, verified suite, we're ready to deploy to production and begin the observation phase.
 
 ---
 
-## Part 5: Late-Game Testing (Steps 11-16)
+## Part 5: Late-Game Testing (Steps 10-15)
 
 ### Philosophy: Observation
 
@@ -464,11 +468,18 @@ In Automation → Merge Request → Automated
 **Focus:** Observation, monitoring, and resilience in production
 **Approaches:** Shift-Right, Chaos Engineering, Production Monitoring
 
-### Step 11: Production Deployment & Smoke Testing
+### Step 10: Continuous Maintenance & Monitoring
 
-**Purpose:** Ensure application stability after production deployment
+**TMLC + TALC Combined** - Keep the test suite healthy and confirm stability after release
 
-**Activities:**
+**Pre-Production Verification:**
+- Execute manual regression tests (TMLC)
+- Run full automated suite (TALC)
+- Smoke/Sanity in staging
+- Review and remove obsolete tests
+- Fix flaky tests
+
+**Post-Deployment Verification:**
 - Perform smoke/sanity tests in production environment
 - Validate critical functionalities post-deployment
 - Log urgent issues for immediate resolution
@@ -483,7 +494,7 @@ DEPLOY → SMOKE TEST → MONITOR → VALIDATE
            PASSED                FAILED → ROLLBACK
 ```
 
-### Step 12: Canary Release Monitoring
+### Step 11: Canary Release Monitoring
 
 **Purpose:** Deploy to a small percentage of users to monitor behavior
 
@@ -499,7 +510,7 @@ DEPLOY → SMOKE TEST → MONITOR → VALIDATE
 - Metrics OK? → Expand rollout
 - Metrics BAD? → Rollback immediately
 
-### Step 13: A/B Testing & Experimentation
+### Step 12: A/B Testing & Experimentation
 
 **Purpose:** Test different feature versions to optimize user experience
 
@@ -524,7 +535,7 @@ DEPLOY → SMOKE TEST → MONITOR → VALIDATE
  Keep current      Deploy new
 ```
 
-### Step 14: Real User Monitoring (RUM)
+### Step 13: Real User Monitoring (RUM)
 
 **Purpose:** Monitor real user experience in production
 
@@ -542,7 +553,7 @@ DEPLOY → SMOKE TEST → MONITOR → VALIDATE
 - User journey completion rates
 - Error rates by page/feature
 
-### Step 15: Chaos Engineering
+### Step 14: Chaos Engineering
 
 **Purpose:** Introduce controlled failures to validate system resilience
 
@@ -563,7 +574,7 @@ DEPLOY → SMOKE TEST → MONITOR → VALIDATE
 6. Document findings and weaknesses
 7. Improve architecture
 
-### Step 16: Feedback Loop & Continuous Improvement
+### Step 15: Feedback Loop & Continuous Improvement
 
 **Purpose:** Analyze feedback and metrics to feed the next Early-Game cycle
 
@@ -607,29 +618,27 @@ QA (Main Dashboard)
 ├── 📄 Test Strategy (single document)
 │   └── Defines overall testing approach, tools, environments
 │
-├── 📄 Master Test Plan (single document)
-│   └── Scope, schedule, resources, entry/exit criteria
+├── 📁 QA Master Test Plan (MTP — Epic, mirrored by .context/master-test-plan.md)
+│   ├── 📋 FTP: {EPIC-KEY}: {feature}          (Feature Test Plan — 1 per feature)
+│   ├── 📋 STP: Sprint#{N}: {objective}        (Sprint Test Plan — 1 per sprint)
+│   └── 📋 ATP: {STORY-KEY}: {story title}     (Acceptance Test Plan — 1 per Story)
 │
-├── 📁 Test Repository (like a Roadmap/Epic container)
-│   │
+├── 📁 QA Test Repository (every Test / TC)
 │   ├── 📁 Module A
-│   │   ├── 📋 Test Suite: Feature A1
-│   │   │   ├── TC-001: Test Case 1
-│   │   │   ├── TC-002: Test Case 2
-│   │   │   └── TC-003: Test Case 3
-│   │   └── 📋 Test Suite: Feature A2
-│   │
+│   │   ├── TC-001: Test Case 1
+│   │   ├── TC-002: Test Case 2
+│   │   └── TC-003: Test Case 3
 │   ├── 📁 Module B
-│   │
 │   └── 📁 Module C
 │
-├── 📁 Test Runs (by Regression)
-│   ├── 📋 Regression [Environment] Sprint X
-│   ├── 📋 Regression [Environment] Sprint Y
-│   └── 📋 Regression [Environment] Sprint Z
+├── 📁 QA Test Artifacts (Test Executions, Test Sets, Preconditions)
+│   ├── 📋 ATS: {STORY-KEY}: {story title}     (per-Story Test Set — mandatory, drives coverage)
+│   ├── 📋 TS: {EPIC|module}: Validate {feature} (feature-level Test Set — optional)
+│   ├── 📋 STR: Sprint#{N}: Regression Testing (sprint-close recap)
+│   └── 📋 ATR: {STORY-KEY}: Story Testing     (per-Story execution)
 │
 ├── 📊 RTM (Requirements Traceability Matrix)
-│   └── Features linked to Test Suites, Test Cases, and Defects
+│   └── Stories linked to Test Sets (coverage), Test Cases, and Defects
 │
 └── 📁 Reports
     ├── 📄 Sprint Test Summary
@@ -713,7 +722,7 @@ The TMS works alongside the Automation Framework's reporting, each serving diffe
 
 | Concept         | Description                                                                                                     | Example                                           |
 | --------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| **Test Case**   | Static template defining WHAT to test. Reused across executions. Has own lifecycle (Draft → Active → Automated) | TC-001 "Verify user login with valid credentials" |
+| **Test Case**   | Static template defining WHAT to test. Reused across executions. Has own lifecycle (Draft → In Design → READY → … → AUTOMATED, see below) | TC-001 "Verify user login with valid credentials" |
 | **Test Run**    | Regression cycle grouping TCs for execution. Has context: sprint, release, environment                          | "Regression Staging Sprint 15"                    |
 | **Test Result** | Outcome of executing a TC in a specific Run. Status: Passed/Failed/Blocked/Skipped. Can link to defect          | TC-001 PASSED in "Regression Staging Sprint 15"   |
 
@@ -731,6 +740,8 @@ The TEST CASE remains the same. Each REGRESSION RUN produces a new RESULT.
 ```
 
 ### Test Case Life Cycle
+
+> **Authoritative source: `.agents/jira-workflows.json`** (`work_types.test_case`). Every status and transition name in this section is copied from that file; regenerate it with `bun run jira:sync-workflows`. A status that is not in that file does not exist in the instance — `Approved`, `Automating`, `Active` and `Merge Request` are common inventions and none of them exist.
 
 The complete lifecycle from creation to automation:
 
@@ -879,7 +890,7 @@ Question: "What requirement does this test case verify?"
 **Early-Game Metrics (Prevention):**
 - Requirements clarity score
 - Defects found in AC review (before dev)
-- FTP coverage per User Story
+- ATP coverage per User Story
 - Time from US creation to QA sign-off
 - Bugs found during exploratory testing
 
@@ -972,10 +983,17 @@ Uses their technical expertise to:
 | **IQL**                | Integrated Quality Lifecycle - methodology that replaces STLC             |
 | **TMLC**               | Test Manual Life Cycle - stages 1-4 for manual testing activities         |
 | **TALC**               | Test Automation Life Cycle - stages 1-4 for automation activities         |
-| **FTP**                | Feature Test Plan - hypotheses/outlines created before testing            |
+| **MTP**                | Master Test Plan - ONE per project; the `QA Master Test Plan` Epic mirrored by `.context/master-test-plan.md` |
+| **FTP**                | Feature Test Plan - ONE per feature/Epic, a living document refined across the epic; feeds every child story's ATP |
+| **STP**                | Sprint Test Plan - ONE per sprint (`STP: Sprint#{N}: {objective}`); living planner opened at sprint start, updated per tested ticket, closed at sprint end |
+| **STR**                | Sprint Test Results - ONE per sprint (`STR: Sprint#{N}: Regression Testing`); the sprint-close recap of all results |
+| **ATP**                | Acceptance Test Plan - ONE per User Story; pre-sprint it lives in the `{{jira.acceptance_test_plan}}` field (outline maturity), the Test Plan item is born in sprint Stage 1 |
+| **ATR**                | Acceptance Test Results - ONE per User Story; the Test Execution reporting what was run and found |
+| **ATS**                | Acceptance Test Set - ONE per User Story, mandatory; the Test Set whose link to the Story provides coverage, and whose membership drives the ATP/ATR test lists |
+| **TS**                 | Feature-level Test Set (`TS: {scope}: Validate {feature}`) - optional grouping for smoke / regression / feature scopes |
 | **Early-Game**         | Prevention phase (Steps 1-4) - QA Analyst led                             |
-| **Mid-Game**           | Detection phase (Steps 5-10) - QA Automation Engineer led                 |
-| **Late-Game**          | Observation phase (Steps 11-16) - QA + DevOps/SRE                         |
+| **Mid-Game**           | Detection phase (Steps 5-9) - QA Automation Engineer led                  |
+| **Late-Game**          | Observation phase (Steps 10-15) - QA + DevOps/SRE                         |
 | **Shift-Left**         | Moving quality activities earlier in the SDLC                             |
 | **Shift-Right**        | Extending quality validation to production                                |
 | **Risk-Based Testing** | Prioritizing tests based on impact and probability                        |
@@ -998,7 +1016,7 @@ The **Integrated Quality Lifecycle (IQL)** is not just a methodology—it's a mi
 
 1. **Quality is not a phase, it's a continuous cycle** - From Early-Game prevention to Late-Game observation
 
-2. **The 16 steps provide a complete framework** - Covering everything from requirements analysis to production feedback loops
+2. **The 15 steps provide a complete framework** - Covering everything from requirements analysis to production feedback loops
 
 3. **Two life cycles work in harmony** - TMLC (manual) and TALC (automation) complement each other
 

@@ -42,11 +42,11 @@ Three phases, always in this order: **Execute → Analyze → Report**. Do not s
 
 ## Subagent Dispatch Strategy
 
-> **Orchestration & Session contracts**: this skill follows `./orchestration-doctrine.md` (mandatory subagent dispatch — main thread is command center) AND `./session-management.md` (Phase 0 resume check, plan-first persistence at `.session/<skill-slug>/<scope>/`, archive on completion). Phase 0 (resume check) and Phase 1 (plan write) are NOT optional. The orchestrator also applies the per-stage **Definition-of-Done gates** in `./stage-gates.md`: verify a stage's DoD BEFORE recording its progress checkpoint and advancing.
+> **Orchestration & Session contracts**: this skill follows `agentic-qa-core/references/orchestration-doctrine.md` (mandatory subagent dispatch — main thread is command center) AND `agentic-qa-core/references/session-management.md` (Phase 0 resume check, plan-first persistence at `.session/<skill-slug>/<scope>/`, archive on completion). Phase 0 (resume check) and Phase 1 (plan write) are NOT optional. The orchestrator also applies the per-stage **Definition-of-Done gates** in `agentic-qa-core/references/stage-gates.md`: verify a stage's DoD BEFORE recording its progress checkpoint and advancing.
 
 This skill is **per-run scope**: `<scope>` = `<env>-<YYYY-MM-DD>` (e.g. `staging-2026-05-20`). Session state lives at `.session/regression-testing/<scope>/{plan.md, progress.md}` per `agentic-qa-core/references/session-management.md` §3 + §9. The single highest-value resume case: if the Monitor subagent dies while watching a long CI run but `RUN_ID` was captured in `plan.md`, Phase 0 re-attaches via `gh run view <RUN_ID>` instead of re-triggering CI (saves 20–60 min of wall-clock).
 
-This skill is compliant with the doctrine in `CLAUDE.md` §"Orchestration Mode (Subagent Strategy)" and the session contract in `.claude/skills/agentic-qa-core/references/session-management.md`. Every dispatch follows the 6-component briefing format defined in `.claude/skills/agentic-qa-core/references/briefing-template.md`, and the pattern selected per stage matches the decision guide in `.claude/skills/agentic-qa-core/references/dispatch-patterns.md`. The two CI-bound stages (long-running watch, multi-artifact download) and the high-volume failure classification step are the hotspots — everything else stays inline because the dispatch overhead is not justified.
+This skill is compliant with the doctrine in `CLAUDE.md` §"Orchestration Mode (Subagent Strategy)" and the session contract in `.claude/skills/agentic-qa-core/references/session-management.md`. Every dispatch follows the 7-component briefing format defined in `.claude/skills/agentic-qa-core/references/briefing-template.md`, and the pattern selected per stage matches the decision guide in `.claude/skills/agentic-qa-core/references/dispatch-patterns.md`. The two CI-bound stages (long-running watch, multi-artifact download) and the high-volume failure classification step are the hotspots — everything else stays inline because the dispatch overhead is not justified.
 
 | Stage                                                      | Pattern    | Subagent role                                                                                                  |
 |------------------------------------------------------------|------------|----------------------------------------------------------------------------------------------------------------|
@@ -405,12 +405,20 @@ the returned Jira key to reference in the report.
 
 The sprint regression maps to two Jira **items** (items-first by excellence — the Story custom field is never used at this altitude):
 
-- **STP** (Sprint Test Plan) — a **Test Plan** item titled `STP: Sprint#{N}: Regression` (e.g. `STP: Sprint#30: Regression`). Parents to the **QA Master Test Plan** epic (`qa.qa_epics.master_test_plan_epic.name`); `relates to` the Sprint.
-- **STR** (Sprint Test Results) — a **Test Execution** item titled `STR: Sprint#{N}: Regression Testing` (e.g. `STR: Sprint#30: Regression Testing`). Parents to the **QA Test Artifacts** epic (`qa.qa_epics.test_artifacts_epic.name`); `relates to` the Sprint; `testPlan` → STP. The run's term is **Regression Testing** — "Sprint" already comes from the `Sprint#{N}` scope-id, so the title carries no redundant "Sprint Regression".
+- **STP** (Sprint Test Plan) — a **Test Plan** item titled `STP: Sprint#{N}: {sprint objective}` (e.g. `STP: Sprint#30: Checkout hardening`). Parents to the **QA Master Test Plan** epic (`qa.qa_epics.master_test_plan_epic.name`); `relates to` the Sprint. **Producer: `/sprint-testing`** — its Session Start find-or-creates the STP on the FIRST ticket of the sprint, and every tested ticket updates it (a live planner: scope, progress). This skill **CONSUMES** the STP as context; it find-or-creates it **only as a fallback** when a suite runs and the STP is missing.
+- **STR** (Sprint Test Results) — a **Test Execution** item titled `STR: Sprint#{N}: Regression Testing` (e.g. `STR: Sprint#30: Regression Testing`). Parents to the **QA Test Artifacts** epic (`qa.qa_epics.test_artifacts_epic.name`); `relates to` the Sprint; `testPlan` → STP. Created at sprint **CLOSE** as the recap of all sprint results — by THIS skill when it runs the closing regression, or completed by `/sprint-testing`'s batch close if that already created it: **whoever arrives first creates it, the other completes it**. The run's term is **Regression Testing** — "Sprint" already comes from the `Sprint#{N}` scope-id, so the title carries no redundant "Sprint Regression".
 
-The `Update Test Execution` below targets the **STR** item.
+**Environment gate**: every Test Execution this skill creates — the STR included — carries the **Test Environment** taken from `active_env` in `.agents/project.yaml`, set at create time. An Execution without its environment fails the checklist: do not write results into it until the environment is set.
+
+**Find-or-create the STR before updating it** — never assume another producer already created it; if `/sprint-testing`'s batch close got there first, the find returns its item and this skill only completes it:
 
 ```
+[TMS_TOOL] Find-or-create Test Execution:
+  summary: STR: Sprint#{N}: Regression Testing
+  parent: {QA Test Artifacts epic — qa.qa_epics.test_artifacts_epic.name}
+  links: {relates to → Sprint; testPlan → STP key}
+  environment: {active_env from .agents/project.yaml}
+
 [TMS_TOOL] Update Test Execution:
   executionKey: {STR execution-key}
   results: {per-ATC status + failure comments from Phase 2}
@@ -490,7 +498,7 @@ On Verdict = NO-GO with regressions still being filed as issues, archive WAITS u
 - **Allure URL is predictable but only live after the "Build & Deploy Allure Report" job succeeds.** If that job failed, the URL 404s — analyze from downloaded artifacts instead.
 - **`gh run watch` can time out** on long suites. Fall back to polling `gh run view <RUN_ID> --json status` every 60-90 seconds.
 - **`gh run view --log` dumps every step's output** and is often >50MB on large suites. Always prefer `--log-failed` during analysis; use `--job=<JOB_ID> --log` for targeted drilldown.
-- **Retries mask flakiness.** Playwright is configured with `retries: 2` in CI. A test that passes on retry is still flaky — inspect `retries` count in Allure, not just final status.
+- **This repo ships `retries: 0` everywhere** (`playwright.config.ts`) — tests must be deterministic, and a retry would only mask the flake. A flaky test therefore surfaces as a plain intermittent failure and is caught by the >20% history rule, never by a retry-pass signal. If a downstream project has consciously enabled retries, a test that passes on retry is still flaky — see the "Conscious divergence: enabling retries" box in `references/ci-cd-integration.md` for how to read retry counts in Allure.
 - **ENVIRONMENT is not a scapegoat.** `ECONNREFUSED` to your app's own API probably means the app crashed, not "infra glitch". Check if the same run has many unrelated tests failing on the same host — that is environment. One test failing with a network error on an endpoint that other tests hit successfully is more likely a REGRESSION.
 - **Never mark NEW TEST as REGRESSION.** A first-ever failure with no history is not a regression — it is unverified. Manually confirm once before classifying.
 - **Flakiness needs 10 runs of history minimum.** If you don't have 10 runs, mark it as "insufficient history" and re-evaluate next sprint. Do not guess.
