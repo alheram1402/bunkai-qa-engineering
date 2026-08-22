@@ -151,3 +151,20 @@ dbhub.local.toml
 # matches it, but this guards against future blanket *.lock or skills.* rules.
 !skills.lock.json
 !**/skills.lock.json
+
+# ===== Synced from boilerplate v7.0 =====
+# ----- 2026-08-22 (sync) -----
+.context/reports/*
+!.context/reports/README.md
+.claude/worktrees/
+.context/PBI/*
+!.context/PBI/README.md
+!.context/PBI/templates/
+!.context/PBI/epics/
+.context/PBI/epics/*
+!.context/PBI/epics/*/
+.context/PBI/epics/*/*
+!.context/PBI/epics/*/test-specs/
+.claude/skills/playwright-cli/
+.claude/skills/playwright-best-practices/
+.claude/skills/resend-cli/

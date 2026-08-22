@@ -60,7 +60,7 @@
     "opencode": "dotenv -o -e .env -- opencode",
     "prepare": "husky",
     "pw:install": "playwright install --with-deps chromium",
-    "repo:check": "bun run format:check && bun run lint:check && bun run types:check && bun run vars:check && bun run skills:check && bun run skills:registry:check && bun run vars:env:check",
+    "repo:check": "bun run format:check && bun run lint:check && bun run types:check && bun run vars:check && bun run skills:check && bun run skills:registry:check && bun run vars:env:check && bun run git:policy verify",
     "repo:fix": "bun run format:fix && bun run lint:fix && bun run types:check && bun run vars:check && bun run skills:check && bun run skills:registry:check && bun run vars:env:check",
     "setup:doctor": "bun cli/doctor.ts",
     "setup": "bun cli/doctor.ts --preflight && bun cli/install.ts",
@@ -84,7 +84,12 @@
     "up": "bun cli/update-boilerplate.ts",
     "vars:check": "bun scripts/lint-vars.ts",
     "vars:env:check": "bun scripts/check-vars.ts",
-    "xray": "bun cli/xray/index.ts"
+    "xray": "bun cli/xray/index.ts",
+    "context:hydrate": "bun scripts/sync-jira-issues.ts pull --include-comments",
+    "git:policy": "bun scripts/git-policy.ts",
+    "jira:components": "bun scripts/sync-jira-components.ts",
+    "jira:url": "bun scripts/atlassian-url.ts",
+    "tests:map": "bun scripts/tests-map.ts"
   },
   "dependencies": {
     "@clack/prompts": "^1.4.0",
